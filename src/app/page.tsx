@@ -1,21 +1,25 @@
 'use client';
 import React, { useState } from 'react';
-import { Book, Tag, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Palette } from 'lucide-react';
+import { Book, Tag, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Trash2, Edit2 } from 'lucide-react';
 
 export default function Home() {
-  const [notebooks] = useState([
+  // Defterler listesi state'i
+  const [notebooks, setNotebooks] = useState([
     { id: 1, name: 'Kişisel' },
     { id: 2, name: 'İş Projeleri' },
   ]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
+  // Yeni defter ekleme modalı ve input state'leri
+  const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
+  const [newNotebookName, setNewNotebookName] = useState('');
+
   const [tasks, setTasks] = useState([
     { id: 1, title: 'Final sunumunu hazırla', completed: false },
     { id: 2, title: 'Haftalık planı gözden geçir', completed: true },
   ]);
 
-  // Keep tarzı renkli ve kompakt notlar
   const [notes, setNotes] = useState([
     { 
       id: 1, 
@@ -40,18 +44,6 @@ export default function Home() {
       badgeColor: 'bg-purple-200 text-purple-900',
       fileName: null,
       fileUrl: null
-    },
-    { 
-      id: 3, 
-      notebook: 'Kişisel', 
-      title: 'Yatırım Planlaması', 
-      content: 'Hisse senedi ve fon dağılımlarının güncellenmesi.', 
-      dayIndex: 4, 
-      time: '11:00',
-      color: 'bg-emerald-50 border-emerald-200 text-emerald-950',
-      badgeColor: 'bg-emerald-200 text-emerald-900',
-      fileName: 'yatirim.pdf',
-      fileUrl: '#'
     },
   ]);
 
@@ -82,6 +74,38 @@ export default function Home() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setAttachedFile(e.target.files[0].name);
+    }
+  };
+
+  // Yeni Defter Ekleme Fonksiyonu
+  const addNotebook = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotebookName.trim()) return;
+    if (notebooks.some(nb => nb.name.toLowerCase() === newNotebookName.trim().toLowerCase())) {
+      alert('Bu isimde bir defter zaten var!');
+      return;
+    }
+    const newNb = { id: Date.now(), name: newNotebookName.trim() };
+    setNotebooks([...notebooks, newNb]);
+    setActiveNotebook(newNb.name);
+    setNewNotebookName('');
+    setIsNotebookModalOpen(false);
+  };
+
+  // Defter Silme Fonksiyonu
+  const deleteNotebook = (nbName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (notebooks.length <= 1) {
+      alert('En az bir defter kalmalıdır!');
+      return;
+    }
+    if (confirm(`"${nbName}" defterini silmek istediğinize emin misiniz? İçindeki notlar silinecektir.`)) {
+      const remainingNotebooks = notebooks.filter(nb => nb.name !== nbName);
+      setNotebooks(remainingNotebooks);
+      setNotes(notes.filter(n => n.notebook !== nbName));
+      if (activeNotebook === nbName) {
+        setActiveNotebook(remainingNotebooks[0].name);
+      }
     }
   };
 
@@ -117,7 +141,7 @@ export default function Home() {
       {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className="w-64 bg-deep-teal text-white p-6 flex flex-col justify-between shadow-md">
         <div>
-          <div className="flex items-center gap-2 mb-10">
+          <div className="flex items-center gap-2 mb-8">
             <div className="bg-white/10 p-2 rounded-lg">
               <FileText className="text-white" size={24} />
             </div>
@@ -126,14 +150,35 @@ export default function Home() {
 
           <nav className="space-y-6">
             <div className="space-y-3">
-              <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Defterlerim</p>
+              <div className="flex justify-between items-center">
+                <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Defterlerim</p>
+                <button 
+                  onClick={() => setIsNotebookModalOpen(true)}
+                  className="text-teal-200 hover:text-white text-xs flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded transition-all"
+                >
+                  <Plus size={14} /> Yeni
+                </button>
+              </div>
+
               {notebooks.map(nb => (
                 <div 
                   key={nb.id} 
                   onClick={() => { setActiveNotebook(nb.name); setActiveView('notes'); setSelectedNote(null); }}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
                 >
-                  <Book size={18} /> {nb.name}
+                  <div className="flex items-center gap-3 truncate">
+                    <Book size={18} /> 
+                    <span className="truncate">{nb.name}</span>
+                  </div>
+                  {notebooks.length > 1 && (
+                    <button 
+                      onClick={(e) => deleteNotebook(nb.name, e)}
+                      className="opacity-0 group-hover:opacity-100 text-teal-200 hover:text-red-300 p-1 transition-opacity"
+                      title="Defteri Sil"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -144,7 +189,7 @@ export default function Home() {
                 onClick={() => { setActiveView('calendar'); setSelectedNote(null); }}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'calendar' ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
               >
-                <CalendarIcon size={18} dev-id="cal" /> Takvim Sayfası
+                <CalendarIcon size={18} /> Takvim Sayfası
               </div>
             </div>
           </nav>
@@ -155,7 +200,7 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* 2. ORTA ALAN (Keep Tarzı Çoklu Sütunlu Renkli Kartlar) */}
+      {/* 2. ORTA ALAN */}
       <main className="flex-1 p-8 bg-white overflow-y-auto flex flex-col">
         {activeView === 'notes' ? (
           <>
@@ -172,7 +217,6 @@ export default function Home() {
               </button>
             </header>
 
-            {/* Keep Tarzı Çoklu Sütun (Grid) Yapısı */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredNotes.length === 0 ? (
                 <p className="text-sm text-gray-400 col-span-3 text-center py-10">Bu defterde henüz not bulunmuyor.</p>
@@ -181,7 +225,7 @@ export default function Home() {
                   <div 
                     key={note.id} 
                     onClick={() => setSelectedNote(note)}
-                    className={`${note.color} p-4 rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col justify-between min-h-[160px]`}
+                    className={`${note.color} p-4 rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col justify-between min-h-[160px]} relative group`}
                   >
                     <div>
                       <div className="flex justify-between items-center mb-2">
@@ -265,6 +309,43 @@ export default function Home() {
         </div>
       </aside>
 
+      {/* YENİ DEFTER EKLEME MODALI */}
+      {isNotebookModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-bold text-lg text-gray-900">Yeni Defter Oluştur</h3>
+            <form onSubmit={addNotebook} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Defter Adı</label>
+                <input 
+                  type="text" 
+                  value={newNotebookName} 
+                  onChange={(e) => setNewNotebookName(e.target.value)} 
+                  placeholder="Örn: Seyahat Planları"
+                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-700"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsNotebookModalOpen(false)}
+                  className="px-4 py-2 border rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"
+                >
+                  İptal
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800"
+                >
+                  Oluştur
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* NOT DETAY MODALI */}
       {selectedNote && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -317,11 +398,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT EKLEME MODALI (Renk Seçenekli) */}
+      {/* YENİ NOT EKLEME MODALI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4">
-            <h3 className="font-bold text-lg text-gray-900">Google Keep Tarzı Not Ekle</h3>
+            <h3 className="font-bold text-lg text-gray-900">Google Keep Tarzı Not Ekle ({activeNotebook})</h3>
             <form onSubmit={addNote} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Not Başlığı</label>
@@ -344,7 +425,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* Renk Seçimi */}
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Kart Rengi</label>
                 <div className="flex gap-2">

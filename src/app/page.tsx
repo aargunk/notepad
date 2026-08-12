@@ -1,63 +1,32 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Trash2, Repeat, Edit, Image as ImageIcon, Mail, RefreshCw } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// SUPABASE BAĞLANTISI
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
-  const [notebooks, setNotebooks] = useState([
-    { id: 1, name: 'Kişisel' },
-    { id: 2, name: 'İş Projeleri' },
-  ]);
+  const [notebooks, setNotebooks] = useState<any[]>([]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
 
-  const [tasks, setTasks] = useState([
-    { id: 1, title: 'Final sunumunu hazırla', completed: false, category: 'Kişisel' },
-    { id: 2, title: 'Haftalık planı gözden geçir', completed: true, category: 'İş Projeleri' },
-  ]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
-  const [notes, setNotes] = useState([
-    { 
-      id: 1, 
-      notebook: 'Kişisel', 
-      title: 'Q4 Strateji Taslağı', 
-      content: 'Bütçe ve pazarlama adımları gözden geçirilecek.', 
-      dayIndex: 0, 
-      time: '10:00',
-      color: 'bg-amber-50 border-amber-200 text-amber-950',
-      badgeColor: 'bg-amber-200 text-amber-900',
-      fileName: 'butce_plani.pdf',
-      fileUrl: '#',
-      imageUrl: null,
-      isRecurring: false,
-      recurrenceInfo: ''
-    },
-    { 
-      id: 2, 
-      notebook: 'İş Projeleri', 
-      title: 'Haftalık Ekip Toplantısı', 
-      content: 'Her pazartesi düzenli durum değerlendirmesi.', 
-      dayIndex: 0, 
-      time: '14:30',
-      color: 'bg-purple-50 border-purple-200 text-purple-950',
-      badgeColor: 'bg-purple-200 text-purple-900',
-      fileName: null,
-      fileUrl: null,
-      imageUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=500&q=60',
-      isRecurring: true,
-      recurrenceInfo: '12 Ocak tarihine kadar her Pazartesi'
-    },
-  ]);
+  const [notes, setNotes] = useState<any[]>([]);
 
+  // Modallar ve Form State'leri
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<any>(null);
   
-  // Form State'leri
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newDayIndex, setNewDayIndex] = useState(0);
@@ -69,11 +38,9 @@ export default function Home() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceText, setRecurrenceText] = useState('Her Pazartesi (12 Ocak tarihine kadar)');
 
-  // Outlook Entegrasyon State'i
   const [isOutlookSynced, setIsOutlookSynced] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Takvim Ayarları Güncellendi (Ağustos 2026)
   const currentMonth = "Ağustos 2026";
   const currentWeek = "10 Ağustos - 16 Ağustos, 2026";
   const days = ['Pzt 10', 'Sal 11', 'Çar 12', 'Per 13', 'Cum 14', 'Cmt 15', 'Paz 16'];
@@ -86,7 +53,150 @@ export default function Home() {
     { name: 'Pembe', card: 'bg-rose-50 border-rose-200 text-rose-950', badge: 'bg-rose-200 text-rose-900' },
   ];
 
-  // Outlook Senkronizasyon Simülasyonu
+  // ==========================================
+  // 1. SUPABASE'DEN VERİLERİ ÇEKME (READ)
+  // ==========================================
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    // Defterleri Çek
+    const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
+    if (nbs && nbs.length > 0) {
+      setNotebooks(nbs);
+    } else {
+      setNotebooks([{ id: 'mock-1', name: 'Kişisel' }]); // Hata olursa boş kalmasın
+    }
+
+    // Görevleri Çek
+    const { data: tks } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
+    if (tks) setTasks(tks);
+
+    // Notları Çek
+    const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
+    if (nts) setNotes(nts);
+  };
+
+  // ==========================================
+  // 2. DEFTER İŞLEMLERİ
+  // ==========================================
+  const addNotebook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotebookName.trim()) return;
+    
+    if (notebooks.some(nb => nb.name.toLowerCase() === newNotebookName.trim().toLowerCase())) {
+      alert('Bu isimde bir defter zaten var!');
+      return;
+    }
+
+    const { data, error } = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
+    if (data) {
+      setNotebooks([...notebooks, data[0]]);
+      setActiveNotebook(data[0].name);
+    }
+    
+    setNewNotebookName('');
+    setIsNotebookModalOpen(false);
+  };
+
+  const deleteNotebook = async (nbName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (notebooks.length <= 1) {
+      alert('En az bir defter kalmalıdır!');
+      return;
+    }
+    if (confirm(`"${nbName}" defterini silmek istediğinize emin misiniz?`)) {
+      await supabase.from('notebooks').delete().eq('name', nbName);
+      await supabase.from('notes').delete().eq('notebook_name', nbName);
+      
+      const remainingNotebooks = notebooks.filter(nb => nb.name !== nbName);
+      setNotebooks(remainingNotebooks);
+      setNotes(notes.filter(n => n.notebook_name !== nbName));
+      if (activeNotebook === nbName) {
+        setActiveNotebook(remainingNotebooks[0].name);
+      }
+    }
+  };
+
+  // ==========================================
+  // 3. GÖREV İŞLEMLERİ
+  // ==========================================
+  const addTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    
+    const newTask = { title: newTaskTitle.trim(), completed: false, category: activeNotebook };
+    const { data } = await supabase.from('tasks').insert([newTask]).select();
+    
+    if (data) setTasks([...tasks, data[0]]);
+    setNewTaskTitle('');
+  };
+
+  const toggleTask = async (id: string, currentStatus: boolean) => {
+    const { data } = await supabase.from('tasks').update({ completed: !currentStatus }).eq('id', id).select();
+    if (data) {
+      setTasks(tasks.map(t => t.id === id ? data[0] : t));
+    }
+  };
+
+  const deleteTask = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await supabase.from('tasks').delete().eq('id', id);
+    setTasks(tasks.filter(t => t.id !== id));
+  };
+
+  // ==========================================
+  // 4. NOT / EYLEM İŞLEMLERİ
+  // ==========================================
+  const saveNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+
+    const notePayload = {
+      notebook_name: activeNotebook,
+      title: newTitle,
+      content: newContent || 'İçerik girilmedi...',
+      day_index: Number(newDayIndex),
+      time: newTime,
+      color: newColor,
+      badge_color: newBadge,
+      file_name: attachedFile,
+      file_url: attachedFile ? '#' : null,
+      image_url: attachedImage,
+      is_recurring: isRecurring,
+      recurrence_info: isRecurring ? recurrenceText : ''
+    };
+
+    if (isEditMode && editingNoteId) {
+      // Güncelleme
+      const { data } = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
+      if (data) setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n));
+    } else {
+      // Yeni Ekleme
+      const { data } = await supabase.from('notes').insert([notePayload]).select();
+      if (data) setNotes([...notes, data[0]]);
+    }
+    
+    resetForm();
+  };
+
+  const deleteNote = async (id: string) => {
+    if(confirm("Bu notu silmek istediğinize emin misiniz?")) {
+      await supabase.from('notes').delete().eq('id', id);
+      setNotes(notes.filter(n => n.id !== id));
+      setSelectedNote(null);
+    }
+  };
+
+  // Dosya ve Resim Simülasyonu
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) setAttachedFile(e.target.files[0].name);
+  };
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) setAttachedImage(URL.createObjectURL(e.target.files[0]));
+  };
+
   const handleOutlookSync = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -96,87 +206,19 @@ export default function Home() {
     }, 1500);
   };
 
-  const toggleTask = (id: number) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
-
-  const addTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-    setTasks([...tasks, { id: Date.now(), title: newTaskTitle.trim(), completed: false, category: activeNotebook }]);
-    setNewTaskTitle('');
-  };
-
-  const deleteTask = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTasks(tasks.filter(t => t.id !== id));
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setAttachedFile(e.target.files[0].name);
-    }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setAttachedImage(url);
-    }
-  };
-
-  const saveNote = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-
-    if (isEditMode && editingNoteId) {
-      setNotes(notes.map(n => n.id === editingNoteId ? {
-        ...n,
-        title: newTitle,
-        content: newContent,
-        dayIndex: Number(newDayIndex),
-        time: newTime,
-        color: newColor,
-        badgeColor: newBadge,
-        fileName: attachedFile,
-        imageUrl: attachedImage,
-        isRecurring: isRecurring,
-        recurrenceInfo: isRecurring ? recurrenceText : ''
-      } : n));
-    } else {
-      const newNote = {
-        id: Date.now(),
-        notebook: activeNotebook,
-        title: newTitle,
-        content: newContent || 'İçerik girilmedi...',
-        dayIndex: Number(newDayIndex),
-        time: newTime,
-        color: newColor,
-        badgeColor: newBadge,
-        fileName: attachedFile,
-        fileUrl: attachedFile ? '#' : null,
-        imageUrl: attachedImage,
-        isRecurring: isRecurring,
-        recurrenceInfo: isRecurring ? recurrenceText : ''
-      };
-      setNotes([...notes, newNote]);
-    }
-    resetForm();
-  };
-
   const openEditModal = (note: any) => {
     setIsEditMode(true);
     setEditingNoteId(note.id);
     setNewTitle(note.title);
     setNewContent(note.content);
-    setNewDayIndex(note.dayIndex);
+    setNewDayIndex(note.day_index);
     setNewTime(note.time);
     setNewColor(note.color);
-    setNewBadge(note.badgeColor);
-    setAttachedFile(note.fileName);
-    setAttachedImage(note.imageUrl);
-    setIsRecurring(note.isRecurring);
-    setRecurrenceText(note.recurrenceInfo || '');
+    setNewBadge(note.badge_color);
+    setAttachedFile(note.file_name);
+    setAttachedImage(note.image_url);
+    setIsRecurring(note.is_recurring);
+    setRecurrenceText(note.recurrence_info || '');
     setSelectedNote(null);
     setIsModalOpen(true);
   };
@@ -197,24 +239,7 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
-  const deleteNote = (id: number) => {
-    if(confirm("Bu notu silmek istediğinize emin misiniz?")) {
-      setNotes(notes.filter(n => n.id !== id));
-      setSelectedNote(null);
-    }
-  };
-
-  const addNotebook = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newNotebookName.trim()) return;
-    const newNb = { id: Date.now(), name: newNotebookName.trim() };
-    setNotebooks([...notebooks, newNb]);
-    setActiveNotebook(newNb.name);
-    setNewNotebookName('');
-    setIsNotebookModalOpen(false);
-  };
-
-  const filteredNotes = notes.filter(n => n.notebook === activeNotebook);
+  const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
   return (
     <div className="flex h-screen bg-soft-white text-gray-800 font-sans relative">
@@ -245,9 +270,20 @@ export default function Home() {
                 <div 
                   key={nb.id} 
                   onClick={() => { setActiveNotebook(nb.name); setActiveView('notes'); setSelectedNote(null); }}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors group ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
                 >
-                  <Book size={18} /> <span className="truncate">{nb.name}</span>
+                  <div className="flex items-center gap-3 truncate">
+                    <Book size={18} /> 
+                    <span className="truncate">{nb.name}</span>
+                  </div>
+                  {notebooks.length > 1 && (
+                    <button 
+                      onClick={(e) => deleteNotebook(nb.name, e)}
+                      className="opacity-0 group-hover:opacity-100 text-teal-200 hover:text-red-300 p-1 transition-opacity"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -269,7 +305,7 @@ export default function Home() {
 
         <div className="space-y-3">
           <div className="text-xs text-teal-300 border-t border-teal-800 pt-4 flex items-center justify-between">
-            <span>Google Drive / Keep:</span> <span>🟢</span>
+            <span>Veritabanı (Supabase):</span> <span>🟢</span>
           </div>
           <div className="text-xs text-teal-300 flex items-center justify-between">
             <span>Microsoft Outlook:</span>
@@ -296,7 +332,7 @@ export default function Home() {
             <header className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{activeNotebook} Defteri</h2>
-                <p className="text-sm text-gray-500">Google Keep tarzı esnek not kartları</p>
+                <p className="text-sm text-gray-500">Google Keep tarzı esnek not kartları (Buluta Kaydedildi)</p>
               </div>
               <button 
                 onClick={openCreateModal}
@@ -312,31 +348,31 @@ export default function Home() {
               ) : (
                 filteredNotes.map(note => (
                   <div key={note.id} onClick={() => setSelectedNote(note)} className={`${note.color} rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col overflow-hidden break-inside-avoid`}>
-                    {note.imageUrl && (
+                    {note.image_url && (
                       <div className="w-full h-32 overflow-hidden border-b border-black/5">
-                        <img src={note.imageUrl} alt="Not Görseli" className="w-full h-full object-cover" />
+                        <img src={note.image_url} alt="Not Görseli" className="w-full h-full object-cover" />
                       </div>
                     )}
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-2">
-                        <span className={`${note.badgeColor} text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1`}>
-                          {note.isRecurring && <Repeat size={10} />} Sticker
+                        <span className={`${note.badge_color} text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1`}>
+                          {note.is_recurring && <Repeat size={10} />} Sticker
                         </span>
-                        <span className="text-[10px] opacity-70">{currentMonth} / {days[note.dayIndex].split(' ')[1]} - {note.time}</span>
+                        <span className="text-[10px] opacity-70">{currentMonth} / {days[note.day_index]?.split(' ')[1]} - {note.time}</span>
                       </div>
                       <h3 className="font-bold text-sm mb-1">{note.title}</h3>
                       <p className="text-xs opacity-90 line-clamp-3">{note.content}</p>
                       
-                      {note.isRecurring && (
+                      {note.is_recurring && (
                         <p className="text-[10px] font-semibold mt-2 opacity-80 flex items-center gap-1 text-purple-800">
-                          <Repeat size={10} /> {note.recurrenceInfo}
+                          <Repeat size={10} /> {note.recurrence_info}
                         </p>
                       )}
 
                       <div className="pt-3 mt-3 border-t border-black/5 flex justify-between items-center text-[10px] opacity-80">
                         <span className="flex items-center gap-1">
-                          {note.fileName && <span>📎 Dosya</span>}
-                          {note.imageUrl && <span className="ml-1">🖼️ Görsel</span>}
+                          {note.file_name && <span>📎 Dosya</span>}
+                          {note.image_url && <span className="ml-1">🖼️ Görsel</span>}
                         </span>
                         <button onClick={(e) => { e.stopPropagation(); openEditModal(note); }} className="font-semibold underline hover:text-teal-700">Düzenle</button>
                       </div>
@@ -375,10 +411,10 @@ export default function Home() {
               {days.map((day, index) => (
                 <div key={day} className="flex flex-col gap-2">
                   <div className="text-center font-semibold text-sm text-gray-600 pb-2 border-b border-gray-200">{day}</div>
-                  {notes.filter(n => n.dayIndex === index).map(note => (
+                  {notes.filter(n => n.day_index === index).map(note => (
                     <div key={note.id} onClick={() => setSelectedNote(note)} className={`${note.color} border p-2.5 rounded-xl shadow-xs text-xs space-y-1 cursor-pointer transition-all`}>
-                      <span className={`${note.badgeColor} text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 w-max`}>
-                        {note.isRecurring && <Repeat size={8} />} {note.notebook}
+                      <span className={`${note.badge_color} text-[9px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1 w-max`}>
+                        {note.is_recurring && <Repeat size={8} />} {note.notebook_name}
                       </span>
                       <p className="font-bold truncate">{note.title}</p>
                       <p className="text-[10px] opacity-70">{note.time}</p>
@@ -405,7 +441,7 @@ export default function Home() {
             {tasks.map(task => (
               <div key={task.id} className="bg-white p-2.5 rounded-lg border flex items-center justify-between group shadow-xs">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id)} className="rounded text-deep-teal focus:ring-deep-teal w-4 h-4 cursor-pointer" />
+                  <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} className="rounded text-deep-teal focus:ring-deep-teal w-4 h-4 cursor-pointer" />
                   <span className={`text-xs truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</span>
                 </div>
                 <button onClick={(e) => deleteTask(task.id, e)} className="text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14} /></button>
@@ -427,16 +463,16 @@ export default function Home() {
 
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold bg-teal-100 text-teal-800 px-2 py-1 rounded-md">Defter: {selectedNote.notebook}</span>
-                {selectedNote.isRecurring && <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-md flex items-center gap-1"><Repeat size={12} /> {selectedNote.recurrenceInfo}</span>}
+                <span className="text-xs font-semibold bg-teal-100 text-teal-800 px-2 py-1 rounded-md">Defter: {selectedNote.notebook_name}</span>
+                {selectedNote.is_recurring && <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-md flex items-center gap-1"><Repeat size={12} /> {selectedNote.recurrence_info}</span>}
               </div>
               <h2 className="text-2xl font-bold text-gray-900 pr-24">{selectedNote.title}</h2>
-              <p className="text-xs text-gray-400 mt-1">Zaman: {currentMonth} / {days[selectedNote.dayIndex].split(' ')[1]} - {selectedNote.time}</p>
+              <p className="text-xs text-gray-400 mt-1">Zaman: {currentMonth} / {days[selectedNote.day_index]?.split(' ')[1]} - {selectedNote.time}</p>
             </div>
 
-            {selectedNote.imageUrl && (
+            {selectedNote.image_url && (
               <div className="w-full h-64 rounded-xl overflow-hidden border border-gray-200">
-                <img src={selectedNote.imageUrl} alt="Not Görseli" className="w-full h-full object-cover" />
+                <img src={selectedNote.image_url} alt="Not Görseli" className="w-full h-full object-cover" />
               </div>
             )}
 
@@ -444,10 +480,10 @@ export default function Home() {
               {selectedNote.content}
             </div>
 
-            {selectedNote.fileName && (
+            {selectedNote.file_name && (
               <div className="flex items-center justify-between bg-teal-50 border border-teal-200 p-3 rounded-xl">
-                <div className="flex items-center gap-2 text-sm text-teal-900 font-medium"><FileText size={18} className="text-teal-700" /> {selectedNote.fileName}</div>
-                <a href={selectedNote.fileUrl} target="_blank" rel="noreferrer" className="text-xs bg-teal-700 text-white px-3 py-1.5 rounded-lg hover:bg-teal-800 flex items-center gap-1"><ExternalLink size={14} /> Görüntüle</a>
+                <div className="flex items-center gap-2 text-sm text-teal-900 font-medium"><FileText size={18} className="text-teal-700" /> {selectedNote.file_name}</div>
+                <a href={selectedNote.file_url} target="_blank" rel="noreferrer" className="text-xs bg-teal-700 text-white px-3 py-1.5 rounded-lg hover:bg-teal-800 flex items-center gap-1"><ExternalLink size={14} /> Görüntüle</a>
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Trash2, Repeat, Edit, Image as ImageIcon } from 'lucide-react';
+import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Trash2, Repeat, Edit, Image as ImageIcon, Mail, RefreshCw } from 'lucide-react';
 
 export default function Home() {
   const [notebooks, setNotebooks] = useState([
@@ -69,7 +69,14 @@ export default function Home() {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceText, setRecurrenceText] = useState('Her Pazartesi (12 Ocak tarihine kadar)');
 
-  const days = ['Pzt 23', 'Sal 24', 'Çar 25', 'Per 26', 'Cum 27', 'Cmt 28', 'Paz 29'];
+  // Outlook Entegrasyon State'i
+  const [isOutlookSynced, setIsOutlookSynced] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Takvim Ayarları Güncellendi (Ağustos 2026)
+  const currentMonth = "Ağustos 2026";
+  const currentWeek = "10 Ağustos - 16 Ağustos, 2026";
+  const days = ['Pzt 10', 'Sal 11', 'Çar 12', 'Per 13', 'Cum 14', 'Cmt 15', 'Paz 16'];
 
   const colorOptions = [
     { name: 'Sarı', card: 'bg-amber-50 border-amber-200 text-amber-950', badge: 'bg-amber-200 text-amber-900' },
@@ -78,6 +85,16 @@ export default function Home() {
     { name: 'Mavi', card: 'bg-sky-50 border-sky-200 text-sky-950', badge: 'bg-sky-200 text-sky-900' },
     { name: 'Pembe', card: 'bg-rose-50 border-rose-200 text-rose-950', badge: 'bg-rose-200 text-rose-900' },
   ];
+
+  // Outlook Senkronizasyon Simülasyonu
+  const handleOutlookSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      alert("Microsoft Graph API'ye bağlanılıyor...\n\nCanlı ortamda burada Microsoft Login sayfası açılacak ve izin onaylandıktan sonra Outlook takvim etkinlikleri projeye aktarılacaktır.");
+      setIsOutlookSynced(true);
+      setIsSyncing(false);
+    }, 1500);
+  };
 
   const toggleTask = (id: number) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
@@ -108,7 +125,6 @@ export default function Home() {
     }
   };
 
-  // Yeni Not veya Düzenleme Kaydetme
   const saveNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -145,7 +161,6 @@ export default function Home() {
       };
       setNotes([...notes, newNote]);
     }
-    
     resetForm();
   };
 
@@ -162,7 +177,7 @@ export default function Home() {
     setAttachedImage(note.imageUrl);
     setIsRecurring(note.isRecurring);
     setRecurrenceText(note.recurrenceInfo || '');
-    setSelectedNote(null); // Detay penceresini kapat
+    setSelectedNote(null);
     setIsModalOpen(true);
   };
 
@@ -241,12 +256,36 @@ export default function Home() {
               <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Planlayıcı</p>
               <div 
                 onClick={() => { setActiveView('calendar'); setSelectedNote(null); }}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'calendar' ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'calendar' ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
               >
-                <CalendarIcon size={18} /> Takvim Sayfası
+                <div className="flex items-center gap-3">
+                  <CalendarIcon size={18} /> Takvim
+                </div>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">{currentMonth}</span>
               </div>
             </div>
           </nav>
+        </div>
+
+        <div className="space-y-3">
+          <div className="text-xs text-teal-300 border-t border-teal-800 pt-4 flex items-center justify-between">
+            <span>Google Drive / Keep:</span> <span>🟢</span>
+          </div>
+          <div className="text-xs text-teal-300 flex items-center justify-between">
+            <span>Microsoft Outlook:</span>
+            {isOutlookSynced ? (
+              <span>🟢</span>
+            ) : (
+              <button 
+                onClick={handleOutlookSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1 bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-all disabled:opacity-50"
+              >
+                {isSyncing ? <RefreshCw size={12} className="animate-spin" /> : <Mail size={12} />} 
+                {isSyncing ? 'Bağlanıyor...' : 'Bağla'}
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -272,24 +311,18 @@ export default function Home() {
                 <p className="text-sm text-gray-400 text-center py-10 w-full col-span-full">Bu defterde henüz not bulunmuyor.</p>
               ) : (
                 filteredNotes.map(note => (
-                  <div 
-                    key={note.id} 
-                    onClick={() => setSelectedNote(note)}
-                    className={`${note.color} rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col overflow-hidden break-inside-avoid`}
-                  >
-                    {/* Kart Görseli (Eğer Varsa) */}
+                  <div key={note.id} onClick={() => setSelectedNote(note)} className={`${note.color} rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col overflow-hidden break-inside-avoid`}>
                     {note.imageUrl && (
                       <div className="w-full h-32 overflow-hidden border-b border-black/5">
                         <img src={note.imageUrl} alt="Not Görseli" className="w-full h-full object-cover" />
                       </div>
                     )}
-
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-2">
                         <span className={`${note.badgeColor} text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1`}>
                           {note.isRecurring && <Repeat size={10} />} Sticker
                         </span>
-                        <span className="text-[10px] opacity-70">{days[note.dayIndex]} - {note.time}</span>
+                        <span className="text-[10px] opacity-70">{currentMonth} / {days[note.dayIndex].split(' ')[1]} - {note.time}</span>
                       </div>
                       <h3 className="font-bold text-sm mb-1">{note.title}</h3>
                       <p className="text-xs opacity-90 line-clamp-3">{note.content}</p>
@@ -317,14 +350,25 @@ export default function Home() {
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Haftalık Takvim Görünümü</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{currentMonth} Takvimi</h2>
+                <p className="text-sm text-gray-500">{currentWeek}</p>
               </div>
-              <button 
-                onClick={openCreateModal}
-                className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
-              >
-                <Plus size={18} /> Takvime Eylem Ekle
-              </button>
+              <div className="flex items-center gap-3">
+                {!isOutlookSynced && (
+                  <button 
+                    onClick={handleOutlookSync}
+                    className="border border-blue-600 text-blue-700 hover:bg-blue-50 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all text-sm"
+                  >
+                    <Mail size={16} /> Outlook'u Bağla
+                  </button>
+                )}
+                <button 
+                  onClick={openCreateModal}
+                  className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <Plus size={18} /> Takvime Eylem Ekle
+                </button>
+              </div>
             </header>
 
             <div className="grid grid-cols-7 gap-3 flex-1 border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
@@ -387,7 +431,7 @@ export default function Home() {
                 {selectedNote.isRecurring && <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-1 rounded-md flex items-center gap-1"><Repeat size={12} /> {selectedNote.recurrenceInfo}</span>}
               </div>
               <h2 className="text-2xl font-bold text-gray-900 pr-24">{selectedNote.title}</h2>
-              <p className="text-xs text-gray-400 mt-1">Zaman: {days[selectedNote.dayIndex]} - {selectedNote.time}</p>
+              <p className="text-xs text-gray-400 mt-1">Zaman: {currentMonth} / {days[selectedNote.dayIndex].split(' ')[1]} - {selectedNote.time}</p>
             </div>
 
             {selectedNote.imageUrl && (
@@ -444,7 +488,7 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Gün</label>
+                  <label className="text-xs text-gray-500 block mb-1">Gün ({currentMonth})</label>
                   <select value={newDayIndex} onChange={(e) => setNewDayIndex(Number(e.target.value))} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-700 bg-white">
                     {days.map((d, idx) => <option key={d} value={idx}>{d}</option>)}
                   </select>
@@ -455,7 +499,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Dosya ve Resim Yükleme Alanı */}
               <div className="space-y-2 border-t pt-2 mt-2">
                 <div>
                   <label className="text-xs text-gray-500 flex items-center gap-1 mb-1"><ImageIcon size={14}/> Görsel / Resim Ekle</label>
@@ -477,6 +520,25 @@ export default function Home() {
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <button type="button" onClick={resetForm} className="px-4 py-2 border rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100">İptal</button>
                 <button type="submit" className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800">{isEditMode ? 'Güncelle' : 'Kaydet'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* YENİ DEFTER EKLEME MODALI */}
+      {isNotebookModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-bold text-lg text-gray-900">Yeni Defter Oluştur</h3>
+            <form onSubmit={addNotebook} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Defter Adı</label>
+                <input type="text" value={newNotebookName} onChange={(e) => setNewNotebookName(e.target.value)} placeholder="Örn: Seyahat Planları" className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-700" required />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsNotebookModalOpen(false)} className="px-4 py-2 border rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100">İptal</button>
+                <button type="submit" className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800">Oluştur</button>
               </div>
             </form>
           </div>

@@ -1,23 +1,52 @@
 'use client';
 import React, { useState } from 'react';
-import { Book, Tag, Plus, CheckSquare, FileText } from 'lucide-react';
+import { Book, Tag, Plus, CheckSquare, FileText, Trash2 } from 'lucide-react';
 
 export default function Home() {
-  const [tasks] = useState([
+  // Görevler listesi state'i
+  const [tasks, setTasks] = useState([
     { id: 1, title: 'Final sunumunu hazırla', completed: false },
     { id: 2, title: 'Haftalık planı gözden geçir', completed: true },
     { id: 3, title: 'Müşteri toplantısı notlarını düzenle', completed: false },
   ]);
 
-  const [notes] = useState([
+  // Notlar listesi state'i
+  const [notes, setNotes] = useState([
     { id: 1, title: 'Q4 Strateji Taslağı', preview: 'Bütçe ve pazarlama adımları...' },
     { id: 2, title: 'Proje Alfa Fikirleri', preview: 'Yeni özellikler için notlar...' },
   ]);
+
+  // Yeni görev / etkinlik eklemek için input state'leri
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+
+  // Görev tamamlandı kutucuğunu değiştirme fonksiyonu
+  const toggleTask = (id: number) => {
+    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  };
+
+  // Yeni görev ekleme fonksiyonu
+  const addTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setTasks([...tasks, { id: Date.now(), title: newTaskTitle, completed: false }]);
+    setNewTaskTitle('');
+  };
+
+  // Yeni not ekleme fonksiyonu
+  const addNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNoteTitle.trim()) return;
+    setNotes([...notes, { id: Date.now(), title: newNoteTitle, preview: 'Yeni eklenen not içeriği...' }]);
+    setNewNoteTitle('');
+  };
 
   const days = ['Pzt 23', 'Sal 24', 'Çar 25', 'Per 26', 'Cum 27', 'Cmt 28', 'Paz 29'];
 
   return (
     <div className="flex h-screen bg-soft-white text-gray-800 font-sans">
+      
+      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className="w-64 bg-deep-teal text-white p-6 flex flex-col justify-between shadow-md">
         <div>
           <div className="flex items-center gap-2 mb-10">
@@ -26,6 +55,7 @@ export default function Home() {
             </div>
             <h1 className="text-xl font-bold tracking-wide">Notepad Pro</h1>
           </div>
+
           <nav className="space-y-6">
             <div className="space-y-3">
               <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Defterlerim</p>
@@ -36,6 +66,7 @@ export default function Home() {
                 <Book size={18} /> İş Projeleri
               </div>
             </div>
+
             <div className="space-y-3">
               <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Etiketler</p>
               <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 cursor-pointer text-teal-100 transition-colors">
@@ -44,27 +75,29 @@ export default function Home() {
             </div>
           </nav>
         </div>
+
         <div className="text-xs text-teal-300 border-t border-teal-800 pt-4">
-          Bulut Senkronizasyonu: Hazır 🟢
+          Bulut Senkronizasyonu: Aktif 🟢
         </div>
       </aside>
 
+      {/* 2. ORTA ALAN (Takvim) */}
       <main className="flex-1 p-8 bg-white overflow-y-auto flex flex-col">
         <header className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Haftalık Takvim</h2>
             <p className="text-sm text-gray-500">Ekim 23 - Ekim 29, 2026</p>
           </div>
-          <button className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all">
-            <Plus size={18} /> Yeni Etkinlik / Not
-          </button>
         </header>
+
+        {/* Takvim Grid Yapısı */}
         <div className="grid grid-cols-7 gap-3 flex-1 border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
           {days.map((day, index) => (
             <div key={day} className="flex flex-col gap-2">
               <div className="text-center font-semibold text-sm text-gray-600 pb-2 border-b border-gray-200">
                 {day}
               </div>
+              
               {index === 0 && (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-xs text-xs space-y-1.5">
                   <span className="bg-amber-200 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-bold">İş</span>
@@ -77,28 +110,64 @@ export default function Home() {
         </div>
       </main>
 
+      {/* 3. SAĞ PANEL (Görevler & Notlar Ekleme) */}
       <aside className="w-80 bg-gray-50 border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto">
+        
+        {/* Görevler Bölümü */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <CheckSquare size={18} className="text-deep-teal" /> Görevlerim
-            </h3>
-          </div>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
+            <CheckSquare size={18} className="text-deep-teal" /> Görevlerim
+          </h3>
+          
+          <form onSubmit={addTask} className="flex gap-2 mb-3">
+            <input 
+              type="text" 
+              placeholder="Yeni görev ekle..." 
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              className="flex-1 text-xs border rounded-lg px-3 py-2 outline-none focus:border-teal-700 bg-white"
+            />
+            <button type="submit" className="bg-deep-teal text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-teal-800">
+              Ekle
+            </button>
+          </form>
+
           <div className="space-y-2.5">
             {tasks.map(task => (
               <div key={task.id} className="bg-white p-3 rounded-xl shadow-xs border border-gray-200 flex items-center gap-3">
-                <input type="checkbox" defaultChecked={task.completed} className="rounded text-deep-teal focus:ring-deep-teal w-4 h-4 cursor-pointer" />
-                <span className={`text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</span>
+                <input 
+                  type="checkbox" 
+                  checked={task.completed} 
+                  onChange={() => toggleTask(task.id)}
+                  className="rounded text-deep-teal focus:ring-deep-teal w-4 h-4 cursor-pointer" 
+                />
+                <span className={`text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                  {task.title}
+                </span>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Notlar Bölümü */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <FileText size={18} className="text-deep-teal" /> Son Notlar
-            </h3>
-          </div>
+          <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
+            <FileText size={18} className="text-deep-teal" /> Notlarım
+          </h3>
+
+          <form onSubmit={addNote} className="flex gap-2 mb-3">
+            <input 
+              type="text" 
+              placeholder="Yeni not başlığı..." 
+              value={newNoteTitle}
+              onChange={(e) => setNewNoteTitle(e.target.value)}
+              className="flex-1 text-xs border rounded-lg px-3 py-2 outline-none focus:border-teal-700 bg-white"
+            />
+            <button type="submit" className="bg-deep-teal text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-teal-800">
+              Ekle
+            </button>
+          </form>
+
           <div className="space-y-3">
             {notes.map(note => (
               <div key={note.id} className="bg-white p-3.5 rounded-xl shadow-xs border border-gray-200">
@@ -108,7 +177,9 @@ export default function Home() {
             ))}
           </div>
         </div>
+
       </aside>
+
     </div>
   );
 }

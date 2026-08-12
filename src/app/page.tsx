@@ -1,15 +1,13 @@
 'use client';
 import React, { useState } from 'react';
-import { Book, Tag, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Upload, ExternalLink, X } from 'lucide-react';
+import { Book, Tag, Plus, CheckSquare, FileText, Calendar as CalendarIcon, ExternalLink, X, Palette } from 'lucide-react';
 
 export default function Home() {
-  const [notebooks, setNotebooks] = useState([
+  const [notebooks] = useState([
     { id: 1, name: 'Kişisel' },
     { id: 2, name: 'İş Projeleri' },
   ]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
-  
-  // Aktif görünüm: 'notes' (Notlar/Defter) veya 'calendar' (Ayrı Takvim Sayfası)
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
   const [tasks, setTasks] = useState([
@@ -17,6 +15,7 @@ export default function Home() {
     { id: 2, title: 'Haftalık planı gözden geçir', completed: true },
   ]);
 
+  // Keep tarzı renkli ve kompakt notlar
   const [notes, setNotes] = useState([
     { 
       id: 1, 
@@ -25,6 +24,8 @@ export default function Home() {
       content: 'Bütçe ve pazarlama adımları gözden geçirilecek.', 
       dayIndex: 0, 
       time: '10:00',
+      color: 'bg-amber-50 border-amber-200 text-amber-950',
+      badgeColor: 'bg-amber-200 text-amber-900',
       fileName: 'butce_plani.pdf',
       fileUrl: '#'
     },
@@ -35,8 +36,22 @@ export default function Home() {
       content: 'Yeni özellikler için kullanıcı geri bildirimleri toplandı.', 
       dayIndex: 2, 
       time: '14:30',
+      color: 'bg-purple-50 border-purple-200 text-purple-950',
+      badgeColor: 'bg-purple-200 text-purple-900',
       fileName: null,
       fileUrl: null
+    },
+    { 
+      id: 3, 
+      notebook: 'Kişisel', 
+      title: 'Yatırım Planlaması', 
+      content: 'Hisse senedi ve fon dağılımlarının güncellenmesi.', 
+      dayIndex: 4, 
+      time: '11:00',
+      color: 'bg-emerald-50 border-emerald-200 text-emerald-950',
+      badgeColor: 'bg-emerald-200 text-emerald-900',
+      fileName: 'yatirim.pdf',
+      fileUrl: '#'
     },
   ]);
 
@@ -47,9 +62,18 @@ export default function Home() {
   const [newContent, setNewContent] = useState('');
   const [newDayIndex, setNewDayIndex] = useState(0);
   const [newTime, setNewTime] = useState('09:00');
+  const [newColor, setNewColor] = useState('bg-amber-50 border-amber-200 text-amber-950');
+  const [newBadge, setNewBadge] = useState('bg-amber-200 text-amber-900');
   const [attachedFile, setAttachedFile] = useState<string | null>(null);
 
   const days = ['Pzt 23', 'Sal 24', 'Çar 25', 'Per 26', 'Cum 27', 'Cmt 28', 'Paz 29'];
+
+  const colorOptions = [
+    { name: 'Sarı', card: 'bg-amber-50 border-amber-200 text-amber-950', badge: 'bg-amber-200 text-amber-900' },
+    { name: 'Mor', card: 'bg-purple-50 border-purple-200 text-purple-950', badge: 'bg-purple-200 text-purple-900' },
+    { name: 'Yeşil', card: 'bg-emerald-50 border-emerald-200 text-emerald-950', badge: 'bg-emerald-200 text-emerald-900' },
+    { name: 'Mavi', card: 'bg-sky-50 border-sky-200 text-sky-950', badge: 'bg-sky-200 text-sky-900' },
+  ];
 
   const toggleTask = (id: number) => {
     setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
@@ -72,6 +96,8 @@ export default function Home() {
       content: newContent || 'İçerik girilmedi...',
       dayIndex: Number(newDayIndex),
       time: newTime,
+      color: newColor,
+      badgeColor: newBadge,
       fileName: attachedFile,
       fileUrl: attachedFile ? '#' : null
     };
@@ -88,7 +114,7 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-soft-white text-gray-800 font-sans relative">
       
-      {/* 1. SOL KENAR ÇUBUĞU (Defterler ve Ayrı Takvim Sekmesi) */}
+      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className="w-64 bg-deep-teal text-white p-6 flex flex-col justify-between shadow-md">
         <div>
           <div className="flex items-center gap-2 mb-10">
@@ -112,64 +138,63 @@ export default function Home() {
               ))}
             </div>
 
-            {/* Ayrı Takvim Sekmesi */}
             <div className="space-y-3 pt-4 border-t border-teal-800">
               <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Planlayıcı</p>
               <div 
                 onClick={() => { setActiveView('calendar'); setSelectedNote(null); }}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'calendar' ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
               >
-                <CalendarIcon size={18} /> Takvim Sayfası
+                <CalendarIcon size={18} dev-id="cal" /> Takvim Sayfası
               </div>
             </div>
           </nav>
         </div>
 
         <div className="text-xs text-teal-300 border-t border-teal-800 pt-4">
-          Google Drive & Bulut: Senkronize 🟢
+          Google Keep & Bulut: Senkronize 🟢
         </div>
       </aside>
 
-      {/* 2. ORTA ALAN (Notlar (3 Kat Büyük Kutular) veya Ayrı Takvim Sayfası) */}
+      {/* 2. ORTA ALAN (Keep Tarzı Çoklu Sütunlu Renkli Kartlar) */}
       <main className="flex-1 p-8 bg-white overflow-y-auto flex flex-col">
         {activeView === 'notes' ? (
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{activeNotebook} Defteri</h2>
-                <p className="text-sm text-gray-500">Notlar ve belgeler</p>
+                <p className="text-sm text-gray-500">Google Keep tarzı esnek not kartları</p>
               </div>
               <button 
                 onClick={() => setIsModalOpen(true)}
                 className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
               >
-                <Plus size={18} /> Yeni Not / Sticker Ekle
+                <Plus size={18} /> Not Ekle
               </button>
             </header>
 
-            {/* Notlar Listesi - En Boy Oranı Korunarak 3 Kat Daha Büyük Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+            {/* Keep Tarzı Çoklu Sütun (Grid) Yapısı */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredNotes.length === 0 ? (
-                <p className="text-sm text-gray-400 col-span-2 text-center py-10">Bu defterde henüz not bulunmuyor.</p>
+                <p className="text-sm text-gray-400 col-span-3 text-center py-10">Bu defterde henüz not bulunmuyor.</p>
               ) : (
                 filteredNotes.map(note => (
                   <div 
                     key={note.id} 
                     onClick={() => setSelectedNote(note)}
-                    className="bg-amber-50/60 p-6 rounded-2xl shadow-md border border-amber-200 cursor-pointer hover:shadow-lg hover:border-amber-400 transition-all flex flex-col justify-between min-h-[220px]"
+                    className={`${note.color} p-4 rounded-2xl shadow-xs border cursor-pointer hover:shadow-md transition-all flex flex-col justify-between min-h-[160px]`}
                   >
                     <div>
                       <div className="flex justify-between items-center mb-2">
-                        <span className="bg-amber-200 text-amber-900 text-xs px-2.5 py-1 rounded-md font-bold">Sticker Not</span>
-                        <span className="text-xs text-gray-500">{days[note.dayIndex]} - {note.time}</span>
+                        <span className={`${note.badgeColor} text-[10px] px-2 py-0.5 rounded-md font-bold`}>Sticker</span>
+                        <span className="text-[10px] opacity-70">{days[note.dayIndex]} - {note.time}</span>
                       </div>
-                      <h3 className="font-bold text-lg text-gray-900 mb-2">{note.title}</h3>
-                      <p className="text-sm text-gray-600 line-clamp-3">{note.content}</p>
+                      <h3 className="font-bold text-sm mb-1">{note.title}</h3>
+                      <p className="text-xs opacity-90 line-clamp-3">{note.content}</p>
                     </div>
 
-                    <div className="pt-4 border-t border-amber-200/60 flex justify-between items-center text-xs text-teal-800">
-                      <span>{note.fileName ? `📎 ${note.fileName}` : 'Dosya eklenmedi'}</span>
-                      <span className="font-semibold underline">Detayı Aç →</span>
+                    <div className="pt-3 mt-3 border-t border-black/5 flex justify-between items-center text-[10px] opacity-80">
+                      <span>{note.fileName ? `📎 ${note.fileName}` : ''}</span>
+                      <span className="font-semibold underline">İncele →</span>
                     </div>
                   </div>
                 ))
@@ -191,7 +216,6 @@ export default function Home() {
               </button>
             </header>
 
-            {/* Ayrı Takvim Sayfası Grid Yapısı */}
             <div className="grid grid-cols-7 gap-3 flex-1 border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
               {days.map((day, index) => (
                 <div key={day} className="flex flex-col gap-2">
@@ -203,11 +227,11 @@ export default function Home() {
                     <div 
                       key={note.id} 
                       onClick={() => setSelectedNote(note)}
-                      className="bg-amber-100 border border-amber-300 p-3 rounded-xl shadow-xs text-xs space-y-1.5 cursor-pointer hover:bg-amber-200 transition-all"
+                      className={`${note.color} border p-2.5 rounded-xl shadow-xs text-xs space-y-1 cursor-pointer transition-all`}
                     >
-                      <span className="bg-amber-300 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold">{note.notebook}</span>
-                      <p className="font-bold text-amber-950 truncate">{note.title}</p>
-                      <p className="text-amber-800 text-[10px]">{note.time}</p>
+                      <span className={`${note.badgeColor} text-[9px] px-1.5 py-0.5 rounded font-bold`}>{note.notebook}</span>
+                      <p className="font-bold truncate">{note.title}</p>
+                      <p className="text-[10px] opacity-70">{note.time}</p>
                     </div>
                   ))}
                 </div>
@@ -268,7 +292,7 @@ export default function Home() {
               <div className="flex items-center justify-between bg-teal-50 border border-teal-200 p-3 rounded-xl">
                 <div className="flex items-center gap-2 text-sm text-teal-900 font-medium">
                   <FileText size={18} className="text-teal-700" />
-                  {selectedNote.fileName} (Google Drive Senkronize)
+                  {selectedNote.fileName} (Google Drive / Keep Senkronize)
                 </div>
                 <a 
                   href={selectedNote.fileUrl} 
@@ -293,11 +317,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT EKLEME MODALI */}
+      {/* YENİ NOT EKLEME MODALI (Renk Seçenekli) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4">
-            <h3 className="font-bold text-lg text-gray-900">Yeni Not / Sticker Ekle</h3>
+            <h3 className="font-bold text-lg text-gray-900">Google Keep Tarzı Not Ekle</h3>
             <form onSubmit={addNote} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Not Başlığı</label>
@@ -305,23 +329,39 @@ export default function Home() {
                   type="text" 
                   value={newTitle} 
                   onChange={(e) => setNewTitle(e.target.value)} 
-                  placeholder="Örn: Müşteri Raporu"
+                  placeholder="Başlık yazın..."
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-700"
                   required
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Detaylı İçerik</label>
+                <label className="text-xs text-gray-500 block mb-1">Not İçeriği</label>
                 <textarea 
                   value={newContent} 
                   onChange={(e) => setNewContent(e.target.value)} 
-                  placeholder="Notunuzu buraya yazın..."
+                  placeholder="Not alın..."
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-700 h-20 resize-none"
                 />
               </div>
+
+              {/* Renk Seçimi */}
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Kart Rengi</label>
+                <div className="flex gap-2">
+                  {colorOptions.map(col => (
+                    <div 
+                      key={col.name}
+                      onClick={() => { setNewColor(col.card); setNewBadge(col.badge); }}
+                      className={`w-6 h-6 rounded-full cursor-pointer border-2 ${col.card.split(' ')[0]} ${newColor === col.card ? 'border-teal-700 scale-110' : 'border-transparent'}`}
+                      title={col.name}
+                    />
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Gün Seçin</label>
+                  <label className="text-xs text-gray-500 block mb-1">Gün</label>
                   <select 
                     value={newDayIndex} 
                     onChange={(e) => setNewDayIndex(Number(e.target.value))}
@@ -344,7 +384,7 @@ export default function Home() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Dosya Ekle (Word, PDF vb. - Google Drive)</label>
+                <label className="text-xs text-gray-500 block mb-1">Dosya Ekle (Google Drive)</label>
                 <input 
                   type="file" 
                   onChange={handleFileUpload}

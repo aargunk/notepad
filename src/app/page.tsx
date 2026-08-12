@@ -8,13 +8,15 @@ export default function Home() {
     { id: 2, name: 'İş Projeleri' },
   ]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
+  
+  // Aktif görünüm: 'notes' (Notlar/Defter) veya 'calendar' (Ayrı Takvim Sayfası)
+  const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
   const [tasks, setTasks] = useState([
     { id: 1, title: 'Final sunumunu hazırla', completed: false },
     { id: 2, title: 'Haftalık planı gözden geçir', completed: true },
   ]);
 
-  // Notlar ve Takvim Bütünleşik Yapısı
   const [notes, setNotes] = useState([
     { 
       id: 1, 
@@ -38,9 +40,8 @@ export default function Home() {
     },
   ]);
 
-  // Modal ve Form State'leri
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<any>(null); // Detay için açılan not
+  const [selectedNote, setSelectedNote] = useState<any>(null);
   
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -87,7 +88,7 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-soft-white text-gray-800 font-sans relative">
       
-      {/* 1. SOL KENAR ÇUBUĞU */}
+      {/* 1. SOL KENAR ÇUBUĞU (Defterler ve Ayrı Takvim Sekmesi) */}
       <aside className="w-64 bg-deep-teal text-white p-6 flex flex-col justify-between shadow-md">
         <div>
           <div className="flex items-center gap-2 mb-10">
@@ -103,12 +104,23 @@ export default function Home() {
               {notebooks.map(nb => (
                 <div 
                   key={nb.id} 
-                  onClick={() => { setActiveNotebook(nb.name); setSelectedNote(null); }}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                  onClick={() => { setActiveNotebook(nb.name); setActiveView('notes'); setSelectedNote(null); }}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
                 >
                   <Book size={18} /> {nb.name}
                 </div>
               ))}
+            </div>
+
+            {/* Ayrı Takvim Sekmesi */}
+            <div className="space-y-3 pt-4 border-t border-teal-800">
+              <p className="text-teal-200 text-xs font-semibold uppercase tracking-wider">Planlayıcı</p>
+              <div 
+                onClick={() => { setActiveView('calendar'); setSelectedNote(null); }}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${activeView === 'calendar' ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+              >
+                <CalendarIcon size={18} /> Takvim Sayfası
+              </div>
             </div>
           </nav>
         </div>
@@ -118,69 +130,96 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* 2. ORTA ALAN (Takvim ve Sarı Sticker Notlar) */}
+      {/* 2. ORTA ALAN (Notlar (3 Kat Büyük Kutular) veya Ayrı Takvim Sayfası) */}
       <main className="flex-1 p-8 bg-white overflow-y-auto flex flex-col">
-        <header className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Haftalık Takvim ({activeNotebook})</h2>
-            <p className="text-sm text-gray-500">Ekim 23 - Ekim 29, 2026</p>
-          </div>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
-          >
-            <Plus size={18} /> Yeni Not / Sticker Ekle
-          </button>
-        </header>
-
-        {/* Takvim Grid Yapısı */}
-        <div className="grid grid-cols-7 gap-3 flex-1 border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
-          {days.map((day, index) => (
-            <div key={day} className="flex flex-col gap-2">
-              <div className="text-center font-semibold text-sm text-gray-600 pb-2 border-b border-gray-200">
-                {day}
+        {activeView === 'notes' ? (
+          <>
+            <header className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{activeNotebook} Defteri</h2>
+                <p className="text-sm text-gray-500">Notlar ve belgeler</p>
               </div>
-              
-              {/* Takvim İçindeki Sarı Sticker Notlar */}
-              {notes.filter(n => n.dayIndex === index && n.notebook === activeNotebook).map(note => (
-                <div 
-                  key={note.id} 
-                  onClick={() => setSelectedNote(note)}
-                  className="bg-amber-100 border border-amber-300 p-3 rounded-xl shadow-xs text-xs space-y-1.5 cursor-pointer hover:bg-amber-200 transition-all transform hover:-translate-y-0.5"
-                >
-                  <span className="bg-amber-300 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold">Sticker</span>
-                  <p className="font-bold text-amber-950 truncate">{note.title}</p>
-                  <p className="text-amber-800 text-[10px]">{note.time}</p>
-                  {note.fileName && <span className="text-[10px] text-teal-800 block underline">📎 Dosya var</span>}
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Plus size={18} /> Yeni Not / Sticker Ekle
+              </button>
+            </header>
+
+            {/* Notlar Listesi - En Boy Oranı Korunarak 3 Kat Daha Büyük Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+              {filteredNotes.length === 0 ? (
+                <p className="text-sm text-gray-400 col-span-2 text-center py-10">Bu defterde henüz not bulunmuyor.</p>
+              ) : (
+                filteredNotes.map(note => (
+                  <div 
+                    key={note.id} 
+                    onClick={() => setSelectedNote(note)}
+                    className="bg-amber-50/60 p-6 rounded-2xl shadow-md border border-amber-200 cursor-pointer hover:shadow-lg hover:border-amber-400 transition-all flex flex-col justify-between min-h-[220px]"
+                  >
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="bg-amber-200 text-amber-900 text-xs px-2.5 py-1 rounded-md font-bold">Sticker Not</span>
+                        <span className="text-xs text-gray-500">{days[note.dayIndex]} - {note.time}</span>
+                      </div>
+                      <h3 className="font-bold text-lg text-gray-900 mb-2">{note.title}</h3>
+                      <p className="text-sm text-gray-600 line-clamp-3">{note.content}</p>
+                    </div>
+
+                    <div className="pt-4 border-t border-amber-200/60 flex justify-between items-center text-xs text-teal-800">
+                      <span>{note.fileName ? `📎 ${note.fileName}` : 'Dosya eklenmedi'}</span>
+                      <span className="font-semibold underline">Detayı Aç →</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <header className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Haftalık Takvim Görünümü</h2>
+                <p className="text-sm text-gray-500">Ekim 23 - Ekim 29, 2026</p>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-deep-teal hover:bg-teal-800 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm transition-all"
+              >
+                <Plus size={18} /> Takvime Not Ekle
+              </button>
+            </header>
+
+            {/* Ayrı Takvim Sayfası Grid Yapısı */}
+            <div className="grid grid-cols-7 gap-3 flex-1 border border-gray-100 rounded-2xl p-4 bg-gray-50/50">
+              {days.map((day, index) => (
+                <div key={day} className="flex flex-col gap-2">
+                  <div className="text-center font-semibold text-sm text-gray-600 pb-2 border-b border-gray-200">
+                    {day}
+                  </div>
+                  
+                  {notes.filter(n => n.dayIndex === index).map(note => (
+                    <div 
+                      key={note.id} 
+                      onClick={() => setSelectedNote(note)}
+                      className="bg-amber-100 border border-amber-300 p-3 rounded-xl shadow-xs text-xs space-y-1.5 cursor-pointer hover:bg-amber-200 transition-all"
+                    >
+                      <span className="bg-amber-300 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-bold">{note.notebook}</span>
+                      <p className="font-bold text-amber-950 truncate">{note.title}</p>
+                      <p className="text-amber-800 text-[10px]">{note.time}</p>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </main>
 
-      {/* 3. SAĞ PANEL (Görevler ve Hızlı Not Listesi) */}
+      {/* 3. SAĞ PANEL (Görevler) */}
       <aside className="w-80 bg-gray-50 border-l border-gray-200 p-6 flex flex-col gap-6 overflow-y-auto">
         <div>
-          <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
-            <FileText size={18} className="text-deep-teal" /> {activeNotebook} Notları
-          </h3>
-          <div className="space-y-2.5">
-            {filteredNotes.map(note => (
-              <div 
-                key={note.id} 
-                onClick={() => setSelectedNote(note)}
-                className="bg-white p-3 rounded-xl shadow-xs border border-gray-200 cursor-pointer hover:border-teal-600 transition-all"
-              >
-                <h4 className="font-semibold text-sm text-gray-800 mb-1">{note.title}</h4>
-                <p className="text-xs text-gray-500 truncate">{note.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Görevler Bölümü */}
-        <div className="border-t pt-4">
           <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
             <CheckSquare size={18} className="text-deep-teal" /> Görevlerim
           </h3>
@@ -202,7 +241,7 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* NOT DETAY / BÜYÜK SAYFA MODALI */}
+      {/* NOT DETAY MODALI */}
       {selectedNote && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl w-full max-w-2xl shadow-2xl space-y-6 relative">
@@ -254,11 +293,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT / STİCKER EKLEME MODALI */}
+      {/* YENİ NOT EKLEME MODALI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4">
-            <h3 className="font-bold text-lg text-gray-900">Takvime Sarı Sticker Ekle</h3>
+            <h3 className="font-bold text-lg text-gray-900">Yeni Not / Sticker Ekle</h3>
             <form onSubmit={addNote} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Not Başlığı</label>
@@ -325,7 +364,7 @@ export default function Home() {
                   type="submit" 
                   className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800"
                 >
-                  Kaydet ve Sticker Yapıştır
+                  Kaydet
                 </button>
               </div>
             </form>

@@ -27,13 +27,13 @@ export default function Home() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileTasksOpen, setIsMobileTasksOpen] = useState(false);
 
-  // DİNAMİK TARİH STATE'LERİ (SINIRSIZ AY VE YIL GEZİNTİSİ)
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 10)); // Ağustos 2026 başlangıç
+  // DİNAMİK TARİH STATE'LERİ
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 10));
   const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
-  // DETAY SAYFASI İÇİ CANLI DÜZENLEME & ÇİZİM STATE'LERİ
+  // CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER STATE'LERİ
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [pageTitle, setPageTitle] = useState('');
   const [pageContent, setPageContent] = useState('');
@@ -43,10 +43,10 @@ export default function Home() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
 
-  // SÜRÜKLE - BIRAK (DRAG & DROP) İÇİN REF
+  // DRAG & DROP
   const draggedNotebookIndex = useRef<number | null>(null);
 
-  // SES İLE METİN YAZMA STATE'LERİ & REF'İ
+  // SPEECH TO TEXT
   const [isListening, setIsListening] = useState(false);
   const [listeningTarget, setListeningTarget] = useState<'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent' | null>(null);
   const recognitionRef = useRef<any>(null);
@@ -69,7 +69,7 @@ export default function Home() {
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
 
-  // GOOGLE OAUTH VE KULLANICI İŞLEMLERİ
+  // GOOGLE OAUTH
   const [userSession, setUserSession] = useState<any>(null);
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -97,7 +97,6 @@ export default function Home() {
     });
   };
 
-  // GERÇEK GOOGLE OAUTH İLE OTURUM AÇMA
   const handleGoogleLogin = async () => {
     setIsSyncing(true);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -119,7 +118,6 @@ export default function Home() {
     setUserSession(null);
   };
 
-  // TARİH İLERLEME / GERİLEME MANTIĞI
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
     if (calendarMode === 'week') {
@@ -144,7 +142,6 @@ export default function Home() {
     setCurrentDate(new Date());
   };
 
-  // DEFTER SIRALAMASINI MOUSE İLE DEĞİŞTİRME
   const handleDragStart = (index: number) => {
     draggedNotebookIndex.current = index;
   };
@@ -180,7 +177,6 @@ export default function Home() {
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
 
-  // SES TANIMA MOTORU
   const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
     if (typeof window === 'undefined') return;
 
@@ -448,15 +444,14 @@ export default function Home() {
 
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
-  // TAKVİM AYLIK VE HAFTALIK DİNAMİK YARDIMCI BİLGİLERİ
   const currentYearVal = currentDate.getFullYear();
-  const currentMonthVal = currentDate.getMonth(); // 0-11
+  const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
-      {/* MOBİL ÜST BAR (HAMBURGER MENÜLÜ) */}
+      {/* MOBİL ÜST BAR */}
       <div className="md:hidden bg-teal-900 text-white px-4 py-3 flex items-center justify-between z-20 shadow-md">
         <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-1 rounded-lg hover:bg-white/10">
           <Menu size={22} />
@@ -470,7 +465,7 @@ export default function Home() {
         </button>
       </div>
 
-      {/* 1. SOL KENAR ÇUBUĞU (RESPONSIVE) */}
+      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-64 md:w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-xl md:shadow-md z-30 transition-transform duration-300 select-none ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
           <div className="flex items-center justify-between mb-6 px-1">
@@ -494,7 +489,6 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* DEFTER LİSTESİ */}
               {notebooks.map((nb, index) => (
                 <div 
                   key={nb.id} 
@@ -557,7 +551,7 @@ export default function Home() {
       <main className="flex-1 p-3 md:p-6 bg-white overflow-y-auto flex flex-col relative w-full">
         
         {openedNotePage ? (
-          /* ================= CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI ================= */
+          /* CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center justify-between mb-4 pb-2 border-b flex-wrap gap-2">
               <button 
@@ -609,7 +603,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* SAMAN KAĞIDI VE ÇİZGİLİ DEFTER DOKUSU */}
             <div 
               ref={canvasContainerRef}
               className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-4 md:p-8 shadow-inner relative overflow-y-auto flex flex-col min-h-[450px]"
@@ -618,7 +611,6 @@ export default function Home() {
                 lineHeight: '28px'
               }}
             >
-              {/* ÇİZİM KATMANI */}
               {isInlineEditing && (
                 <canvas 
                   ref={canvasRef}
@@ -682,7 +674,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD (RENKLİ KARTLAR) */
+          /* DASHBOARD */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
@@ -726,18 +718,16 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* ================= OUTLOOK / GOOGLE TİPİ DİNAMİK TAKVİM ================= */
+          /* DİNAMİK TAKVİM */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
-            
-            {/* TAKVİM ÜST BAR (SINIRSIZ TARİH SEÇİCİ) */}
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
                 <button onClick={handleToday} className="px-3 py-1.5 border rounded-lg text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 shadow-2xs">
                   Bugün
                 </button>
                 <div className="flex items-center gap-1">
-                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Önceki"><ChevronLeft size={18} /></button>
-                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Sonraki"><ChevronRight size={18} /></button>
+                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronLeft size={18} /></button>
+                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronRight size={18} /></button>
                 </div>
                 <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight">
                   {MONTH_NAMES[currentMonthVal]} {currentYearVal}
@@ -775,10 +765,8 @@ export default function Home() {
               </div>
             </header>
 
-            {/* TAKVİM İÇERİK ALANI */}
             <div className="flex-1 overflow-auto">
               {calendarMode === 'week' ? (
-                /* HAFTALIK ZAMAN ÇİZELGESİ */
                 <div className="flex flex-col min-w-[650px]">
                   <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
                     <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
@@ -816,7 +804,6 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* AYLIK DİNAMİK IZGARA */
                 <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
                   {DAY_NAMES.map(d => (
                     <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">
@@ -853,7 +840,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 3. SAĞ PANEL (GÖREVLER - RESPONSIVE MODAL/DRAWER) */}
+      {/* 3. SAĞ PANEL (GÖREVLER) */}
       <aside className={`fixed md:relative inset-y-0 right-0 w-72 bg-gray-50 border-l border-gray-200 p-5 flex flex-col gap-5 overflow-y-auto z-30 transition-transform duration-300 ${isMobileTasksOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
         <div className="flex justify-between items-center md:hidden pb-2 border-b">
           <h3 className="font-bold text-xs text-gray-800">Görevler</h3>
@@ -882,7 +869,7 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* GERÇEK GOOGLE OAUTH MODALI */}
+      {/* GOOGLE OAUTH MODALI */}
       {isCalendarSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">
@@ -899,7 +886,7 @@ export default function Home() {
                   <span className="text-xl">🌐</span>
                   <div>
                     <p className="font-bold text-xs text-gray-900">Google Hesabı</p>
-                    <p className="text-[11px] text-gray-500">Google Calendar ile çift yönlü senkronizasyon</p>
+                    <p className="text-[11px] text-gray-500">Google Calendar ile senkronizasyon</p>
                   </div>
                 </div>
                 {userSession ? (
@@ -925,7 +912,7 @@ export default function Home() {
               ) : (
                 <div className="pt-2 space-y-2">
                   <button onClick={handleGoogleLogin} disabled={isSyncing} className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2">
-                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Giriş Yap & Senkronize Et</span>}
+                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Giriş Yap</span>}
                   </button>
                 </div>
               )}
@@ -1042,5 +1029,3 @@ export default function Home() {
     </div>
   );
 }
-
-```

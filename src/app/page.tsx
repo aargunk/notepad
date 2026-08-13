@@ -1,6 +1,10 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, ShieldAlert, Save, PenTool, Eraser } from 'lucide-react';
+import { 
+  Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, 
+  Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
+  ShieldAlert, Save, PenTool, Eraser 
+} from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -21,6 +25,7 @@ export default function Home() {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
@@ -61,6 +66,26 @@ export default function Home() {
     fetchData();
   }, []);
 
+  // Canvas boyutunu kapsayıcıya tam sığacak şekilde dinamik ayarlama
+  useEffect(() => {
+    if (isInlineEditing && canvasRef.current && canvasContainerRef.current) {
+      const canvas = canvasRef.current;
+      const container = canvasContainerRef.current;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+
+      // Eğer önceden var olan bir çizim görseli varsa Canvas üzerine yükle
+      if (openedNotePage?.image_url) {
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = openedNotePage.image_url;
+      }
+    }
+  }, [isInlineEditing, isDrawingMode, openedNotePage]);
+
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) setNotebooks(nbs);
@@ -87,7 +112,6 @@ export default function Home() {
     if (!openedNotePage) return;
     let drawingData = openedNotePage.image_url;
 
-    // Eğer çizim yapıldıysa resim olarak al
     if (canvasRef.current) {
       drawingData = canvasRef.current.toDataURL();
     }
@@ -105,18 +129,41 @@ export default function Home() {
       .eq('id', openedNotePage.id)
       .select();
 
-    if (data) {
+    if (data && data.length > 0) {
       setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n));
       setOpenedNotePage(data[0]);
     } else {
+      setNotes(notes.map(n => n.id === openedNotePage.id ? updatedNote : n));
       setOpenedNotePage(updatedNote);
     }
     setIsInlineEditing(false);
     setIsDrawingMode(false);
   };
 
-  // Çizim İşlemleri (Canvas)
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Gelismis Çizim İşlemleri (Mouse & Touch Destekli)
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    
+    let clientX = 0;
+    let clientY = 0;
+
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -124,21 +171,21 @@ export default function Home() {
     if (!ctx) return;
     
     isDrawing.current = true;
-    const rect = canvas.getBoundingClientRect();
+    const { x, y } = getCoordinates(e);
     ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.moveTo(x, y);
   };
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing.current || !isDrawingMode) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.strokeStyle = '#1e3a8a'; // Koyu mavi mürekkep kalemi
+    const { x, y } = getCoordinates(e);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = '#1e3a8a';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.stroke();
@@ -159,9 +206,13 @@ export default function Home() {
     e.preventDefault();
     if (!newNotebookName.trim()) return;
     const { data } = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
-    if (data) {
+    if (data && data.length > 0) {
       setNotebooks([...notebooks, data[0]]);
       setActiveNotebook(data[0].name);
+    } else {
+      const newNb = { id: Date.now().toString(), name: newNotebookName.trim() };
+      setNotebooks([...notebooks, newNb]);
+      setActiveNotebook(newNb.name);
     }
     setNewNotebookName('');
     setIsNotebookModalOpen(false);
@@ -184,13 +235,15 @@ export default function Home() {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
     const { data } = await supabase.from('tasks').insert([{ title: newTaskTitle.trim(), completed: false, category: activeNotebook }]).select();
-    if (data) setTasks([...tasks, data[0]]);
+    if (data && data.length > 0) setTasks([...tasks, data[0]]);
+    else setTasks([...tasks, { id: Date.now().toString(), title: newTaskTitle.trim(), completed: false }]);
     setNewTaskTitle('');
   };
 
   const toggleTask = async (id: string, currentStatus: boolean) => {
     const { data } = await supabase.from('tasks').update({ completed: !currentStatus }).eq('id', id).select();
-    if (data) setTasks(tasks.map(t => t.id === id ? data[0] : t));
+    if (data && data.length > 0) setTasks(tasks.map(t => t.id === id ? data[0] : t));
+    else setTasks(tasks.map(t => t.id === id ? { ...t, completed: !currentStatus } : t));
   };
 
   const deleteTask = async (id: string, e: React.MouseEvent) => {
@@ -218,13 +271,14 @@ export default function Home() {
 
     if (isEditMode && editingNoteId) {
       const { data } = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
-      if (data) {
+      if (data && data.length > 0) {
         setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n));
         if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]);
       }
     } else {
       const { data } = await supabase.from('notes').insert([notePayload]).select();
-      if (data) setNotes([...notes, data[0]]);
+      if (data && data.length > 0) setNotes([...notes, data[0]]);
+      else setNotes([...notes, { ...notePayload, id: Date.now().toString() }]);
     }
     resetForm();
   };
@@ -262,7 +316,7 @@ export default function Home() {
         badge_color: 'bg-sky-200 text-sky-900',
       };
       supabase.from('notes').insert([googleEvent]).then(({ data }) => {
-        if (data) setNotes(prev => [...prev, data[0]]);
+        if (data && data.length > 0) setNotes(prev => [...prev, data[0]]);
         else fetchData();
       });
     }, 1200);
@@ -274,7 +328,7 @@ export default function Home() {
     <div className="flex h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
       {/* 1. SOL KENAR ÇUBUĞU */}
-      <aside className="w-52 bg-deep-teal text-white p-4 flex flex-col justify-between shadow-md z-10">
+      <aside className="w-52 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-md z-10">
         <div>
           <div className="flex items-center gap-2 mb-6 px-1">
             <div className="bg-white/10 p-1.5 rounded-lg">
@@ -295,7 +349,13 @@ export default function Home() {
               {notebooks.map(nb => (
                 <div 
                   key={nb.id} 
-                  onClick={() => { setActiveNotebook(nb.name); setActiveView('notes'); setOpenedNotePage(null); }}
+                  onClick={() => { 
+                    setActiveNotebook(nb.name); 
+                    setActiveView('notes'); 
+                    setOpenedNotePage(null);
+                    setIsInlineEditing(false);
+                    setIsDrawingMode(false);
+                  }}
                   className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors group ${activeView === 'notes' && activeNotebook === nb.name && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
                 >
                   <div className="flex items-center gap-2 truncate">
@@ -314,7 +374,12 @@ export default function Home() {
             <div className="space-y-2 pt-3 border-t border-teal-800">
               <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1">Plan</p>
               <div 
-                onClick={() => { setActiveView('calendar'); setOpenedNotePage(null); }}
+                onClick={() => { 
+                  setActiveView('calendar'); 
+                  setOpenedNotePage(null);
+                  setIsInlineEditing(false);
+                  setIsDrawingMode(false);
+                }}
                 className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
               >
                 <div className="flex items-center gap-2">
@@ -335,7 +400,7 @@ export default function Home() {
       <main className="flex-1 p-6 bg-white overflow-y-auto flex flex-col relative">
         
         {openedNotePage ? (
-          /* ================= ONENOTE TARZI CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI ================= */
+          /* ================= CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI ================= */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center justify-between mb-4 pb-2 border-b">
               <button 
@@ -378,22 +443,25 @@ export default function Home() {
             </div>
 
             {/* SAMAN KAĞIDI VE ÇİZGİLİ DEFTER DOKUSU */}
-            <div className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-8 shadow-inner relative overflow-y-auto flex flex-col"
-                 style={{
-                   backgroundImage: 'repeating-linear-gradient(white, white 27px, #e8f0fe 28px)',
-                   lineHeight: '28px'
-                 }}>
-              
+            <div 
+              ref={canvasContainerRef}
+              className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-8 shadow-inner relative overflow-y-auto flex flex-col min-h-[500px]"
+              style={{
+                backgroundImage: 'repeating-linear-gradient(white, white 27px, #e8f0fe 28px)',
+                lineHeight: '28px'
+              }}
+            >
               {/* ÇİZİM KATMANI (CANVAS) */}
               {isInlineEditing && (
                 <canvas 
                   ref={canvasRef}
-                  width={750}
-                  height={500}
                   onMouseDown={startDrawing}
                   onMouseMove={draw}
                   onMouseUp={stopDrawing}
                   onMouseLeave={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
                   className={`absolute inset-0 z-20 ${isDrawingMode ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
                 />
               )}
@@ -409,7 +477,9 @@ export default function Home() {
                 ) : (
                   <h1 className="text-3xl font-bold text-gray-900 tracking-tight font-serif">{openedNotePage.title}</h1>
                 )}
-                <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">{currentMonth} - {days[openedNotePage.day_index]} ({openedNotePage.time})</span>
+                <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">
+                  {currentMonth} - {days[openedNotePage.day_index || 0]} ({openedNotePage.time})
+                </span>
               </div>
 
               {openedNotePage.image_url && !isInlineEditing && (
@@ -446,7 +516,7 @@ export default function Home() {
               </div>
               <button 
                 onClick={() => { resetForm(); setIsModalOpen(true); }}
-                className="bg-deep-teal hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"
+                className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"
               >
                 <Plus size={16} /> Yeni Not Kartı
               </button>
@@ -465,7 +535,7 @@ export default function Home() {
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2 py-0.5 rounded font-bold`}>
-                          [{days[note.day_index]}] [{note.time}]
+                          [{days[note.day_index || 0]}] [{note.time}]
                         </span>
                       </div>
                       <h3 className="font-bold text-sm mb-1.5 text-gray-900">{note.title}</h3>
@@ -495,7 +565,7 @@ export default function Home() {
                 >
                   <Settings size={15} /> Takvim Ayarları
                 </button>
-                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-deep-teal hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm">
                   <Plus size={16} /> Takvime Ekle
                 </button>
               </div>
@@ -522,17 +592,17 @@ export default function Home() {
       <aside className="w-72 bg-gray-50 border-l border-gray-200 p-5 flex flex-col gap-5 overflow-y-auto z-10">
         <div>
           <h3 className="font-bold text-xs text-gray-800 flex items-center gap-1.5 mb-3 uppercase tracking-wider">
-            <CheckSquare size={16} className="text-deep-teal" /> Görevlerim
+            <CheckSquare size={16} className="text-teal-900" /> Görevlerim
           </h3>
           <form onSubmit={addTask} className="flex gap-1.5 mb-3">
             <input type="text" placeholder="Yeni görev..." value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} className="flex-1 text-xs border rounded-lg px-2.5 py-1.5 outline-none bg-white" />
-            <button type="submit" className="bg-deep-teal text-white px-2.5 py-1.5 rounded-lg text-xs font-medium">Ekle</button>
+            <button type="submit" className="bg-teal-900 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium">Ekle</button>
           </form>
           <div className="space-y-1.5">
             {tasks.map(task => (
               <div key={task.id} className="bg-white p-2 rounded-lg border flex items-center justify-between group shadow-xs">
                 <div className="flex items-center gap-2 overflow-hidden">
-                  <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} className="rounded text-deep-teal w-3.5 h-3.5 cursor-pointer" />
+                  <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} className="rounded text-teal-900 w-3.5 h-3.5 cursor-pointer" />
                   <span className={`text-xs truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</span>
                 </div>
                 <button onClick={(e) => deleteTask(task.id, e)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
@@ -548,7 +618,7 @@ export default function Home() {
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
-                <Settings size={18} className="text-deep-teal" /> Takvim & Entegrasyon Ayarları
+                <Settings size={18} className="text-teal-900" /> Takvim & Entegrasyon Ayarları
               </h3>
               <button onClick={() => setIsCalendarSettingsOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button>
             </div>
@@ -592,7 +662,7 @@ export default function Home() {
             </div>
 
             <div className="flex justify-end pt-2">
-              <button onClick={() => setIsCalendarSettingsOpen(false)} className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800">Tamam</button>
+              <button onClick={() => setIsCalendarSettingsOpen(false)} className="px-4 py-2 bg-teal-900 text-white rounded-lg text-xs font-medium hover:bg-teal-800">Tamam</button>
             </div>
           </div>
         </div>
@@ -637,7 +707,7 @@ export default function Home() {
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={resetForm} className="px-3 py-1.5 border rounded-lg text-xs text-gray-600">İptal</button>
-                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">{isEditMode ? 'Güncelle' : 'Oluştur'}</button>
+                <button type="submit" className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs">{isEditMode ? 'Güncelle' : 'Oluştur'}</button>
               </div>
             </form>
           </div>
@@ -653,7 +723,7 @@ export default function Home() {
               <input type="text" value={newNotebookName} onChange={(e) => setNewNotebookName(e.target.value)} placeholder="Defter adı..." className="w-full border rounded-lg px-3 py-2 text-xs" required />
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setIsNotebookModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">İptal</button>
-                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">Oluştur</button>
+                <button type="submit" className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs">Oluştur</button>
               </div>
             </form>
           </div>

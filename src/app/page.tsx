@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, 
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
-  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff 
+  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical 
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,6 +27,9 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
+
+  // SÜRÜKLE - BIRAK (DRAG & DROP) İÇİN REF
+  const draggedNotebookIndex = useRef<number | null>(null);
 
   // SES İLE METİN YAZMA STATE'LERİ & REF'İ
   const [isListening, setIsListening] = useState(false);
@@ -71,6 +74,24 @@ export default function Home() {
     fetchData();
   }, []);
 
+  // DEFTER SIRALAMASINI MOUSE İLE DEĞİŞTİRME HANDLER'LARI
+  const handleDragStart = (index: number) => {
+    draggedNotebookIndex.current = index;
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (dropIndex: number) => {
+    if (draggedNotebookIndex.current === null || draggedNotebookIndex.current === dropIndex) return;
+    const reordered = [...notebooks];
+    const [draggedItem] = reordered.splice(draggedNotebookIndex.current, 1);
+    reordered.splice(dropIndex, 0, draggedItem);
+    setNotebooks(reordered);
+    draggedNotebookIndex.current = null;
+  };
+
   // Canvas boyutunu kapsayıcıya tam sığacak şekilde dinamik ayarlama
   useEffect(() => {
     if (isInlineEditing && canvasRef.current && canvasContainerRef.current) {
@@ -90,9 +111,8 @@ export default function Home() {
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
 
-  // SES TANIMA (SPEECH TO TEXT) MOTORUNUN HAZIRLANMASI
+  // SES TANIMA (SPEECH TO TEXT) MOTORU
   const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
-    // Tarayıcı Desteği Kontrolü
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
@@ -202,7 +222,7 @@ export default function Home() {
     setIsDrawingMode(false);
   };
 
-  // Gelismis Çizim İşlemleri (Mouse & Touch Destekli)
+  // Gelismis Çizim İşlemleri
   const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -363,6 +383,7 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
+  // VERCEL DERLEME HATASININ DÜZELTİLDİĞİ KISIM (.select() eklendi)
   const handleConnectGoogleCalendar = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -377,7 +398,7 @@ export default function Home() {
         color: 'bg-sky-50 border-sky-200 text-sky-950',
         badge_color: 'bg-sky-200 text-sky-900',
       };
-      supabase.from('notes').insert([googleEvent]).then(({ data }) => {
+      supabase.from('notes').insert([googleEvent]).select().then(({ data }: any) => {
         if (data && data.length > 0) setNotes(prev => [...prev, data[0]]);
         else fetchData();
       });
@@ -390,7 +411,7 @@ export default function Home() {
     <div className="flex h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
       {/* 1. SOL KENAR ÇUBUĞU */}
-      <aside className="w-52 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-md z-10">
+      <aside className="w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-md z-10 select-none">
         <div>
           <div className="flex items-center gap-2 mb-6 px-1">
             <div className="bg-white/10 p-1.5 rounded-lg">
@@ -408,9 +429,14 @@ export default function Home() {
                 </button>
               </div>
 
-              {notebooks.map(nb => (
+              {/* SÜRÜKLE - BIRAK (DRAG & DROP) DESTEKLİ DEFTER LİSTESİ */}
+              {notebooks.map((nb, index) => (
                 <div 
                   key={nb.id} 
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(index)}
                   onClick={() => { 
                     setActiveNotebook(nb.name); 
                     setActiveView('notes'); 
@@ -418,14 +444,15 @@ export default function Home() {
                     setIsInlineEditing(false);
                     setIsDrawingMode(false);
                   }}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors group ${activeView === 'notes' && activeNotebook === nb.name && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                  className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing text-xs transition-all group ${activeView === 'notes' && activeNotebook === nb.name && !openedNotePage ? 'bg-white/20 font-medium text-white shadow-xs' : 'hover:bg-white/10 text-teal-100'}`}
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <Book size={14} /> 
+                  <div className="flex items-center gap-1.5 truncate">
+                    <GripVertical size={13} className="text-teal-400/60 group-hover:text-teal-200 shrink-0" />
+                    <Book size={14} className="shrink-0" /> 
                     <span className="truncate">{nb.name}</span>
                   </div>
                   {notebooks.length > 1 && (
-                    <button onClick={(e) => deleteNotebook(nb.name, e)} className="opacity-0 group-hover:opacity-100 text-teal-200 hover:text-red-300 p-0.5">
+                    <button onClick={(e) => deleteNotebook(nb.name, e)} className="opacity-0 group-hover:opacity-100 text-teal-200 hover:text-red-300 p-0.5 transition-opacity">
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -475,7 +502,6 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 {isInlineEditing ? (
                   <>
-                    {/* Sesle Sayfa İçeriğini Konuşarak Yazma Düğmesi */}
                     <button 
                       onClick={() => toggleListening('pageContent')} 
                       className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-all ${isListening && listeningTarget === 'pageContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'}`}
@@ -751,14 +777,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT MODALI (SESLE YAZMA DESTEKLİ) */}
+      {/* YENİ NOT MODALI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
             <h3 className="font-bold text-base text-gray-900">{isEditMode ? 'Not Kartını Düzenle' : 'Yeni Not Kartı Ekle'}</h3>
             <form onSubmit={saveNote} className="space-y-3">
-              
-              {/* BAŞLIK ALANI & SESLE YAZMA */}
               <div>
                 <label className="text-xs text-gray-500 flex justify-between items-center mb-1">
                   <span>Başlık</span>
@@ -783,7 +807,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* İÇERİK ALANI & SESLE YAZMA */}
               <div>
                 <label className="text-xs text-gray-500 flex justify-between items-center mb-1">
                   <span>İçerik</span>

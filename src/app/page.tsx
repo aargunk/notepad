@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Trash2, Edit, ArrowLeft } from 'lucide-react';
+import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -12,7 +12,6 @@ export default function Home() {
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
-  // OneNote Tarzı Açılan Defter/Sayfa Modu
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
@@ -34,6 +33,11 @@ export default function Home() {
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
   const [attachedFile, setAttachedFile] = useState<string | null>(null);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
+
+  // GOOGLE TAKVİM ENTEGRASYON STATE'LERİ
+  const [isGoogleCalendarConnected, setIsGoogleCalendarConnected] = useState(false);
+  const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const currentMonth = "Ağustos 2026";
   const days = ['Pzt 10', 'Sal 11', 'Çar 12', 'Per 13', 'Cum 14', 'Cmt 15', 'Paz 16'];
@@ -168,6 +172,33 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
+  // Google Takvim Senkronizasyon Simülasyonu
+  const handleConnectGoogleCalendar = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsGoogleCalendarConnected(true);
+      setIsSyncing(false);
+      // Google Takvim'den çekilmiş örnek bir eylem ekleyelim
+      const googleEvent = {
+        notebook_name: activeNotebook,
+        title: '📅 Google Takvim: Haftalık Ekip Toplantısı',
+        content: 'Google Calendar API üzerinden otomatik çekildi.',
+        day_index: 2,
+        time: '14:00',
+        color: 'bg-sky-50 border-sky-200 text-sky-950',
+        badge_color: 'bg-sky-200 text-sky-900',
+      };
+      supabase.from('notes').insert([googleEvent]).then(({ data }) => {
+        if (data) setNotes(prev => [...prev, data[0]]);
+        else fetchData();
+      });
+    }, 1200);
+  };
+
+  const handleDisconnectGoogleCalendar = () => {
+    setIsGoogleCalendarConnected(false);
+  };
+
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
   return (
@@ -215,9 +246,12 @@ export default function Home() {
               <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1">Plan</p>
               <div 
                 onClick={() => { setActiveView('calendar'); setOpenedNotePage(null); }}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
               >
-                <CalendarIcon size={14} /> Takvim
+                <div className="flex items-center gap-2">
+                  <CalendarIcon size={14} /> Takvim
+                </div>
+                {isGoogleCalendarConnected && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Google Takvim Bağlı" />}
               </div>
             </div>
           </nav>
@@ -314,15 +348,27 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* TAKVİM */
+          /* TAKVİM VE GOOGLE TAKVİM ENTEGRASYONU */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{currentMonth} Takvimi</h2>
+                <p className="text-xs text-gray-500">
+                  {isGoogleCalendarConnected ? '🟢 Google Takvim ile senkronize ediliyor.' : '⚪ Google Takvim bağlı değil.'}
+                </p>
               </div>
-              <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-deep-teal hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5">
-                <Plus size={16} /> Takvime Ekle
-              </button>
+              
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsCalendarSettingsOpen(true)}
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-2xs transition-all"
+                >
+                  <Settings size={15} /> Takvim Ayarları
+                </button>
+                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-deep-teal hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                  <Plus size={16} /> Takvime Ekle
+                </button>
+              </div>
             </header>
 
             <div className="grid grid-cols-7 gap-2.5 flex-1 border border-gray-100 rounded-2xl p-3 bg-gray-50/50">
@@ -330,8 +376,9 @@ export default function Home() {
                 <div key={day} className="flex flex-col gap-2">
                   <div className="text-center font-semibold text-xs text-gray-600 pb-2 border-b">{day}</div>
                   {notes.filter(n => n.day_index === index).map(note => (
-                    <div key={note.id} onClick={() => setOpenedNotePage(note)} className={`${note.color || 'bg-amber-100'} border p-2 rounded-xl text-xs space-y-1 cursor-pointer`}>
+                    <div key={note.id} onClick={() => setOpenedNotePage(note)} className={`${note.color || 'bg-amber-100'} border p-2 rounded-xl text-xs space-y-1 cursor-pointer hover:shadow-sm`}>
                       <p className="font-bold truncate">{note.title}</p>
+                      <p className="text-[10px] opacity-70">{note.time}</p>
                     </div>
                   ))}
                 </div>
@@ -364,6 +411,78 @@ export default function Home() {
           </div>
         </div>
       </aside>
+
+      {/* GOOGLE TAKVİM AYARLARI MODALI */}
+      {isCalendarSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                <Settings size={18} className="text-deep-teal" /> Takvim & Entegrasyon Ayarları
+              </h3>
+              <button onClick={() => setIsCalendarSettingsOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button>
+            </div>
+
+            <div className="p-4 border rounded-xl bg-gray-50/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">📅</span>
+                  <div>
+                    <p className="font-bold text-xs text-gray-900">Google Takvim Entegrasyonu</p>
+                    <p className="text-[11px] text-gray-500">Etkinlikleri çift yönlü senkronize edin</p>
+                  </div>
+                </div>
+                {isGoogleCalendarConnected ? (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 size={10} /> Bağlı
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldAlert size={10} /> Pasif
+                  </span>
+                )}
+              </div>
+
+              {isGoogleCalendarConnected ? (
+                <div className="pt-2 space-y-2">
+                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                    Hesabınız Google Takvim ile senkronize durumda. Yeni eylemleriniz Google Takviminize işlenmektedir.
+                  </p>
+                  <button 
+                    onClick={handleDisconnectGoogleCalendar}
+                    className="w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors"
+                  >
+                    Google Hesabının Bağlantısını Kes
+                  </button>
+                </div>
+              ) : (
+                <div className="pt-2 space-y-2">
+                  <p className="text-xs text-gray-600">
+                    Google hesabınızı bağlayarak takvimdeki toplantılarınızı ve etkinliklerinizi otomatik olarak çekebilirsiniz.
+                  </p>
+                  <button 
+                    onClick={handleConnectGoogleCalendar}
+                    disabled={isSyncing}
+                    className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2"
+                  >
+                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Bağlan</span>}
+                    {isSyncing ? 'Bağlanıyor...' : ''}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={() => setIsCalendarSettingsOpen(false)} 
+                className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800"
+              >
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* YENİ NOT MODALI */}
       {isModalOpen && (

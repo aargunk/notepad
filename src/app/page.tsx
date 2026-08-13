@@ -1,6 +1,6 @@
 'use client';
-import React, { useState, useEffect } from 'react';
-import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, ShieldAlert, Save, PenTool, Eraser } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -13,6 +13,15 @@ export default function Home() {
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
+
+  // DETAY SAYFASI İÇİ CANLI DÜZENLEME & ÇİZİM STATE'LERİ
+  const [isInlineEditing, setIsInlineEditing] = useState(false);
+  const [pageTitle, setPageTitle] = useState('');
+  const [pageContent, setPageContent] = useState('');
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawing = useRef(false);
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
@@ -34,7 +43,6 @@ export default function Home() {
   const [attachedFile, setAttachedFile] = useState<string | null>(null);
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
 
-  // GOOGLE TAKVİM ENTEGRASYON STATE'LERİ
   const [isGoogleCalendarConnected, setIsGoogleCalendarConnected] = useState(false);
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -63,6 +71,88 @@ export default function Home() {
 
     const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
     if (nts) setNotes(nts);
+  };
+
+  // Detay Sayfası Açıldığında Verileri Hazırla
+  const handleOpenPage = (note: any) => {
+    setOpenedNotePage(note);
+    setPageTitle(note.title);
+    setPageContent(note.content);
+    setIsInlineEditing(false);
+    setIsDrawingMode(false);
+  };
+
+  // Sayfa İçi Canlı Kaydetme
+  const handleSaveInline = async () => {
+    if (!openedNotePage) return;
+    let drawingData = openedNotePage.image_url;
+
+    // Eğer çizim yapıldıysa resim olarak al
+    if (canvasRef.current) {
+      drawingData = canvasRef.current.toDataURL();
+    }
+
+    const updatedNote = {
+      ...openedNotePage,
+      title: pageTitle,
+      content: pageContent,
+      image_url: drawingData
+    };
+
+    const { data } = await supabase
+      .from('notes')
+      .update({ title: pageTitle, content: pageContent, image_url: drawingData })
+      .eq('id', openedNotePage.id)
+      .select();
+
+    if (data) {
+      setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n));
+      setOpenedNotePage(data[0]);
+    } else {
+      setOpenedNotePage(updatedNote);
+    }
+    setIsInlineEditing(false);
+    setIsDrawingMode(false);
+  };
+
+  // Çizim İşlemleri (Canvas)
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingMode) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    isDrawing.current = true;
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current || !isDrawingMode) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.strokeStyle = '#1e3a8a'; // Koyu mavi mürekkep kalemi
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    isDrawing.current = false;
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
   const addNotebook = async (e: React.FormEvent) => {
@@ -147,21 +237,6 @@ export default function Home() {
     }
   };
 
-  const openEditModal = (note: any, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setIsEditMode(true);
-    setEditingNoteId(note.id);
-    setNewTitle(note.title);
-    setNewContent(note.content);
-    setNewDayIndex(note.day_index);
-    setNewTime(note.time);
-    setNewColor(note.color);
-    setNewBadge(note.badge_color);
-    setAttachedFile(note.file_name);
-    setAttachedImage(note.image_url);
-    setIsModalOpen(true);
-  };
-
   const resetForm = () => {
     setIsEditMode(false);
     setEditingNoteId(null);
@@ -191,10 +266,6 @@ export default function Home() {
         else fetchData();
       });
     }, 1200);
-  };
-
-  const handleDisconnectGoogleCalendar = () => {
-    setIsGoogleCalendarConnected(false);
   };
 
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
@@ -264,7 +335,7 @@ export default function Home() {
       <main className="flex-1 p-6 bg-white overflow-y-auto flex flex-col relative">
         
         {openedNotePage ? (
-          /* ONENOTE TARZI ÇİZGİLİ DEFTER SAYFASI */
+          /* ================= ONENOTE TARZI CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI ================= */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center justify-between mb-4 pb-2 border-b">
               <button 
@@ -273,36 +344,100 @@ export default function Home() {
               >
                 <ArrowLeft size={16} /> Dashboard'a Dön
               </button>
+
               <div className="flex items-center gap-2">
-                <button onClick={() => openEditModal(openedNotePage)} className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1"><Edit size={14}/> Düzenle</button>
-                <button onClick={() => deleteNote(openedNotePage.id)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1"><Trash2 size={14}/> Sil</button>
+                {isInlineEditing ? (
+                  <>
+                    <button 
+                      onClick={() => setIsDrawingMode(!isDrawingMode)} 
+                      className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium transition-colors ${isDrawingMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                    >
+                      <PenTool size={14} /> {isDrawingMode ? 'Metin Moduna Geç' : '✏️ Çizim Yap'}
+                    </button>
+                    {isDrawingMode && (
+                      <button onClick={clearCanvas} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+                        <Eraser size={14} /> Temizle
+                      </button>
+                    )}
+                    <button onClick={handleSaveInline} className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 font-bold shadow-xs">
+                      <Save size={14} /> Kaydet
+                    </button>
+                    <button onClick={() => { setIsInlineEditing(false); setIsDrawingMode(false); }} className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">İptal</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setIsInlineEditing(true)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium">
+                      <Edit size={14}/> Düzenle / Çiz
+                    </button>
+                    <button onClick={() => deleteNote(openedNotePage.id)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium">
+                      <Trash2 size={14}/> Sil
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-8 shadow-inner relative overflow-y-auto"
+            {/* SAMAN KAĞIDI VE ÇİZGİLİ DEFTER DOKUSU */}
+            <div className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-8 shadow-inner relative overflow-y-auto flex flex-col"
                  style={{
                    backgroundImage: 'repeating-linear-gradient(white, white 27px, #e8f0fe 28px)',
                    lineHeight: '28px'
                  }}>
               
-              <div className="flex justify-between items-start mb-4">
-                <h1 className="text-3xl font-bold text-gray-900 tracking-tight font-serif">{openedNotePage.title}</h1>
+              {/* ÇİZİM KATMANI (CANVAS) */}
+              {isInlineEditing && (
+                <canvas 
+                  ref={canvasRef}
+                  width={750}
+                  height={500}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onMouseLeave={stopDrawing}
+                  className={`absolute inset-0 z-20 ${isDrawingMode ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`}
+                />
+              )}
+
+              <div className="flex justify-between items-start mb-4 relative z-10">
+                {isInlineEditing ? (
+                  <input 
+                    type="text" 
+                    value={pageTitle} 
+                    onChange={(e) => setPageTitle(e.target.value)}
+                    className="text-3xl font-bold text-gray-900 font-serif bg-white/70 border border-teal-300 rounded px-2 py-1 outline-none w-2/3"
+                  />
+                ) : (
+                  <h1 className="text-3xl font-bold text-gray-900 tracking-tight font-serif">{openedNotePage.title}</h1>
+                )}
                 <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">{currentMonth} - {days[openedNotePage.day_index]} ({openedNotePage.time})</span>
               </div>
 
-              {openedNotePage.image_url && (
-                <div className="my-4 max-w-md rounded-xl overflow-hidden border shadow-sm">
-                  <img src={openedNotePage.image_url} alt="Görsel" className="w-full object-cover" />
+              {openedNotePage.image_url && !isInlineEditing && (
+                <div className="my-4 max-w-md rounded-xl overflow-hidden border shadow-sm relative z-10">
+                  <img src={openedNotePage.image_url} alt="Çizim veya Görsel" className="w-full object-cover" />
                 </div>
               )}
 
-              <div className="text-base text-gray-800 whitespace-pre-wrap font-serif pt-2">
-                {openedNotePage.content}
+              {/* CANLI DÜZENLENEBİLİR İÇERİK ALANI */}
+              <div className="flex-1 relative z-10">
+                {isInlineEditing ? (
+                  <textarea 
+                    value={pageContent}
+                    onChange={(e) => setPageContent(e.target.value)}
+                    className="w-full h-full min-h-[300px] bg-transparent font-serif text-base text-gray-800 outline-none resize-none"
+                    style={{ lineHeight: '28px' }}
+                    placeholder="Sayfa üzerine doğrudan yazabilirsiniz..."
+                  />
+                ) : (
+                  <div className="text-base text-gray-800 whitespace-pre-wrap font-serif pt-2">
+                    {openedNotePage.content}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD (DİNAMİK ESNEYEN KARTLAR: min 1 satır, max ~8 satır) */
+          /* DASHBOARD (RENKLİ KARTLAR) */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
@@ -324,7 +459,7 @@ export default function Home() {
                 filteredNotes.map(note => (
                   <div 
                     key={note.id} 
-                    onClick={() => setOpenedNotePage(note)}
+                    onClick={() => handleOpenPage(note)}
                     className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border shadow-xs cursor-pointer hover:shadow-md transition-all flex flex-col justify-between break-inside-avoid relative group min-h-[130px] max-h-[320px] overflow-hidden`}
                   >
                     <div>
@@ -334,7 +469,6 @@ export default function Home() {
                         </span>
                       </div>
                       <h3 className="font-bold text-sm mb-1.5 text-gray-900">{note.title}</h3>
-                      {/* İçerik metni: Line-clamp ile maksimum ~8 satır (160px) sınırlandırıldı */}
                       <p className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap line-clamp-[8]">{note.content}</p>
                     </div>
 
@@ -352,9 +486,6 @@ export default function Home() {
             <header className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{currentMonth} Takvimi</h2>
-                <p className="text-xs text-gray-500">
-                  {isGoogleCalendarConnected ? '🟢 Google Takvim ile senkronize ediliyor.' : '⚪ Google Takvim bağlı değil.'}
-                </p>
               </div>
               
               <div className="flex items-center gap-2">
@@ -375,7 +506,7 @@ export default function Home() {
                 <div key={day} className="flex flex-col gap-2">
                   <div className="text-center font-semibold text-xs text-gray-600 pb-2 border-b">{day}</div>
                   {notes.filter(n => n.day_index === index).map(note => (
-                    <div key={note.id} onClick={() => setOpenedNotePage(note)} className={`${note.color || 'bg-amber-100'} border p-2 rounded-xl text-xs space-y-1 cursor-pointer hover:shadow-sm`}>
+                    <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-100'} border p-2 rounded-xl text-xs space-y-1 cursor-pointer hover:shadow-sm`}>
                       <p className="font-bold truncate">{note.title}</p>
                       <p className="text-[10px] opacity-70">{note.time}</p>
                     </div>
@@ -445,39 +576,23 @@ export default function Home() {
               {isGoogleCalendarConnected ? (
                 <div className="pt-2 space-y-2">
                   <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                    Hesabınız Google Takvim ile senkronize durumda. Yeni eylemleriniz Google Takviminize işlenmektedir.
+                    Hesabınız Google Takvim ile senkronize durumda.
                   </p>
-                  <button 
-                    onClick={handleDisconnectGoogleCalendar}
-                    className="w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors"
-                  >
+                  <button onClick={() => setIsGoogleCalendarConnected(false)} className="w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors">
                     Google Hesabının Bağlantısını Kes
                   </button>
                 </div>
               ) : (
                 <div className="pt-2 space-y-2">
-                  <p className="text-xs text-gray-600">
-                    Google hesabınızı bağlayarak takvimdeki toplantılarınızı ve etkinliklerinizi otomatik olarak çekebilirsiniz.
-                  </p>
-                  <button 
-                    onClick={handleConnectGoogleCalendar}
-                    disabled={isSyncing}
-                    className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2"
-                  >
+                  <button onClick={handleConnectGoogleCalendar} disabled={isSyncing} className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2">
                     {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Bağlan</span>}
-                    {isSyncing ? 'Bağlanıyor...' : ''}
                   </button>
                 </div>
               )}
             </div>
 
             <div className="flex justify-end pt-2">
-              <button 
-                onClick={() => setIsCalendarSettingsOpen(false)} 
-                className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800"
-              >
-                Tamam
-              </button>
+              <button onClick={() => setIsCalendarSettingsOpen(false)} className="px-4 py-2 bg-deep-teal text-white rounded-lg text-xs font-medium hover:bg-teal-800">Tamam</button>
             </div>
           </div>
         </div>
@@ -534,11 +649,11 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
             <h3 className="font-bold text-base text-gray-900">Yeni Defter Oluştur</h3>
-            <form onSubmit= {addNotebook} className="space-y-3">
+            <form onSubmit={addNotebook} className="space-y-3">
               <input type="text" value={newNotebookName} onChange={(e) => setNewNotebookName(e.target.value)} placeholder="Defter adı..." className="w-full border rounded-lg px-3 py-2 text-xs" required />
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setIsNotebookModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">İptal</button>
-                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">Oluştur</video>
+                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">Oluştur</button>
               </div>
             </form>
           </div>

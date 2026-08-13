@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, 
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
-  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical 
+  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
+  ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -15,6 +16,9 @@ export default function Home() {
   const [notebooks, setNotebooks] = useState<any[]>([]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
+
+  // TAKVİM GÖRÜNÜM STATE'LERİ (Haftalık vs Aylık)
+  const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
@@ -62,6 +66,7 @@ export default function Home() {
 
   const currentMonth = "Ağustos 2026";
   const days = ['Pzt 10', 'Sal 11', 'Çar 12', 'Per 13', 'Cum 14', 'Cmt 15', 'Paz 16'];
+  const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
 
   const colorOptions = [
     { name: 'Yeşil', card: 'bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950', badge: 'bg-emerald-200 text-emerald-900' },
@@ -661,40 +666,132 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* TAKVİM */
-          <>
-            <header className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{currentMonth} Takvimi</h2>
+          /* ================= OUTLOOK / GOOGLE TİPİ GELİŞMİŞ TAKVİM GÖRÜNÜMÜ ================= */
+          <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+            
+            {/* TAKVİM ÜST BAR (NAVİGASYON VE GÖRÜNÜM SEÇİCİ) */}
+            <header className="flex justify-between items-center px-6 py-3.5 border-b border-gray-200 bg-gray-50/50">
+              <div className="flex items-center gap-4">
+                <button className="px-3 py-1.5 border rounded-lg text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 shadow-2xs">
+                  Bugün
+                </button>
+                <div className="flex items-center gap-1">
+                  <button className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronLeft size={18} /></button>
+                  <button className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronRight size={18} /></button>
+                </div>
+                <h2 className="text-lg font-bold text-gray-900 tracking-tight">{currentMonth}</h2>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/* GÖRÜNÜM SEÇENEĞİ (HAFTALIK / AYLIK) */}
+                <div className="flex bg-gray-200/80 p-1 rounded-xl text-xs font-semibold text-gray-600">
+                  <button 
+                    onClick={() => setCalendarMode('week')}
+                    className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}
+                  >
+                    Hafta
+                  </button>
+                  <button 
+                    onClick={() => setCalendarMode('month')}
+                    className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}
+                  >
+                    Ay
+                  </button>
+                </div>
+
                 <button 
                   onClick={() => setIsCalendarSettingsOpen(true)}
-                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-2xs transition-all"
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs"
+                  title="Takvim Ayarları"
                 >
-                  <Settings size={15} /> Takvim Ayarları
+                  <Settings size={16} />
                 </button>
-                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm">
-                  <Plus size={16} /> Takvime Ekle
+                <button 
+                  onClick={() => { resetForm(); setIsModalOpen(true); }} 
+                  className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus size={16} /> Etkinlik Ekle
                 </button>
               </div>
             </header>
 
-            <div className="grid grid-cols-7 gap-2.5 flex-1 border border-gray-100 rounded-2xl p-3 bg-gray-50/50">
-              {days.map((day, index) => (
-                <div key={day} className="flex flex-col gap-2">
-                  <div className="text-center font-semibold text-xs text-gray-600 pb-2 border-b">{day}</div>
-                  {notes.filter(n => n.day_index === index).map(note => (
-                    <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-100'} border p-2 rounded-xl text-xs space-y-1 cursor-pointer hover:shadow-sm`}>
-                      <p className="font-bold truncate">{note.title}</p>
-                      <p className="text-[10px] opacity-70">{note.time}</p>
+            {/* TAKVİM İÇERİK ALANI */}
+            <div className="flex-1 overflow-y-auto">
+              {calendarMode === 'week' ? (
+                /* 1. HAFTALIK ZAMAN ÇİZELGESİ (GOOGL/OUTLOOK GRID) */
+                <div className="flex flex-col min-w-[700px]">
+                  {/* Gün Başlıkları */}
+                  <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
+                    <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">GMT+3</div>
+                    {days.map((day, idx) => (
+                      <div key={day} className={`py-2.5 text-xs font-bold border-r border-gray-200 ${idx === 3 ? 'bg-teal-50 text-teal-900' : 'text-gray-700'}`}>
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Saatlik Çizelge */}
+                  <div className="divide-y divide-gray-100">
+                    {hours.map((hour) => (
+                      <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[52px]">
+                        <div className="text-[11px] text-gray-400 font-medium text-center pt-1 border-r border-gray-200 bg-gray-50/30">
+                          {hour}
+                        </div>
+                        {days.map((_, dayIdx) => {
+                          const matchedNotes = notes.filter(n => n.day_index === dayIdx && n.time === hour);
+                          return (
+                            <div key={dayIdx} className="border-r border-gray-100 p-1 relative hover:bg-teal-50/20 transition-colors">
+                              {matchedNotes.map(note => (
+                                <div 
+                                  key={note.id} 
+                                  onClick={() => handleOpenPage(note)}
+                                  className={`${note.color || 'bg-teal-100'} p-1.5 rounded-md text-[11px] font-semibold border border-black/10 cursor-pointer shadow-xs hover:scale-[1.02] transition-transform truncate`}
+                                >
+                                  {note.title}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* 2. AYLIK IZGARA (FULL MONTH GRID) */
+                <div className="grid grid-cols-7 h-full auto-rows-fr divide-x divide-y divide-gray-200">
+                  {['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'].map(d => (
+                    <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">
+                      {d}
                     </div>
                   ))}
+                  {Array.from({ length: 31 }).map((_, i) => {
+                    const dayNum = i + 1;
+                    const matchedNotes = notes.filter(n => (n.day_index % 7) === (i % 7));
+                    return (
+                      <div key={i} className="min-h-[100px] p-1.5 bg-white hover:bg-gray-50/50 transition-colors flex flex-col gap-1 overflow-hidden">
+                        <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${dayNum === 13 ? 'bg-teal-900 text-white' : 'text-gray-500'}`}>
+                          {dayNum}
+                        </span>
+                        <div className="flex flex-col gap-1 overflow-y-auto">
+                          {matchedNotes.slice(0, 3).map(note => (
+                            <div 
+                              key={note.id} 
+                              onClick={() => handleOpenPage(note)}
+                              className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer hover:opacity-80`}
+                            >
+                              {note.time} {note.title}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              )}
             </div>
-          </>
+
+          </div>
         )}
       </main>
 
@@ -848,7 +945,9 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">Saat</label>
-                  <input type="text" value={newTime} onChange={(e) => setNewTime(e.target.value)} placeholder="10:00" className="w-full border rounded-lg px-3 py-1.5 text-xs" />
+                  <select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">
+                    {hours.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
                 </div>
               </div>
 

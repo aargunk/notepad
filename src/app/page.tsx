@@ -58,13 +58,13 @@ export default function Home() {
     );
   }
 
-  return (
+return (
     <div className="flex h-screen bg-[#f4f5f7] text-gray-800 font-sans overflow-hidden">
       {/* 1. SIDEBAR */}
       <aside className="w-52 bg-teal-900 text-white p-4 flex flex-col justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-8"><FileText size={20} /> <span className="font-bold">Notepad Pro</span></div>
-          <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-8 px-2"><FileText size={20} /> <span className="font-bold">Notepad Pro</span></div>
+          <div className="space-y-4 px-2">
             <p className="text-teal-400 text-[10px] uppercase font-bold">Defterlerim</p>
             {notebooks.map(nb => (
               <div key={nb.id} onClick={() => setActiveNotebook(nb.name)} className="flex items-center gap-2 cursor-pointer hover:text-white text-teal-100 text-xs">
@@ -73,7 +73,7 @@ export default function Home() {
             ))}
           </div>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-[10px] text-teal-300 hover:text-white">
+        <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-[10px] text-teal-300 hover:text-white px-2">
           <LogOut size={12} /> Çıkış Yap
         </button>
       </aside>
@@ -81,23 +81,28 @@ export default function Home() {
       {/* 2. ANA EKRAN */}
       <main className="flex-1 p-8 overflow-y-auto">
         <h2 className="text-2xl font-bold mb-6">{activeNotebook} Defteri</h2>
-        <div className="grid grid-cols-3 gap-4">
-          {notes.filter(n => n.notebook_name === activeNotebook).map(n => (
-            <div key={n.id} className={`${n.color} p-4 rounded-xl border shadow-sm`}>
-              <h3 className="font-bold text-sm">{n.title}</h3>
-              <p className="text-xs mt-2">{n.content}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {notes
+            .filter(n => n.notebook_name === activeNotebook)
+            .map(n => (
+              <div key={n.id} className={`${n.color || 'bg-white'} p-4 rounded-xl border shadow-sm`}>
+                <h3 className="font-bold text-sm">{n.title}</h3>
+                <p className="text-xs mt-2 text-gray-600 line-clamp-3">{n.content}</p>
+              </div>
+            ))
+          }
         </div>
       </main>
 
       {/* 3. GÖREVLER */}
       <aside className="w-72 bg-gray-50 border-l border-gray-200 p-5">
-        <h3 className="font-bold text-xs uppercase mb-4">Görevlerim</h3>
+        <h3 className="font-bold text-xs uppercase mb-4 text-gray-500">Görevlerim</h3>
         {tasks.map(t => (
-          <div key={t.id} className="text-xs p-2 bg-white rounded border mb-2">{t.title}</div>
+          <div key={t.id} className="text-xs p-2.5 bg-white rounded border mb-2 shadow-sm flex items-center gap-2">
+            <input type="checkbox" checked={t.completed} readOnly /> {t.title}
+          </div>
         ))}
       </aside>
     </div>
   );
-}
+  }

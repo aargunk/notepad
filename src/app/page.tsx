@@ -172,13 +172,11 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
-  // Google Takvim Senkronizasyon Simülasyonu
   const handleConnectGoogleCalendar = () => {
     setIsSyncing(true);
     setTimeout(() => {
       setIsGoogleCalendarConnected(true);
       setIsSyncing(false);
-      // Google Takvim'den çekilmiş örnek bir eylem ekleyelim
       const googleEvent = {
         notebook_name: activeNotebook,
         title: '📅 Google Takvim: Haftalık Ekip Toplantısı',
@@ -304,7 +302,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD (RENKLİ KARTLAR) */
+          /* DASHBOARD (DİNAMİK ESNEYEN KARTLAR: min 1 satır, max ~8 satır) */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
@@ -327,7 +325,7 @@ export default function Home() {
                   <div 
                     key={note.id} 
                     onClick={() => setOpenedNotePage(note)}
-                    className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border shadow-xs cursor-pointer hover:shadow-md transition-all flex flex-col justify-between break-inside-avoid relative group resize-y overflow-auto min-h-[180px]`}
+                    className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border shadow-xs cursor-pointer hover:shadow-md transition-all flex flex-col justify-between break-inside-avoid relative group min-h-[130px] max-h-[320px] overflow-hidden`}
                   >
                     <div>
                       <div className="flex justify-between items-center mb-2">
@@ -336,7 +334,8 @@ export default function Home() {
                         </span>
                       </div>
                       <h3 className="font-bold text-sm mb-1.5 text-gray-900">{note.title}</h3>
-                      <p className="text-xs opacity-90 line-clamp-4 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                      {/* İçerik metni: Line-clamp ile maksimum ~8 satır (160px) sınırlandırıldı */}
+                      <p className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap line-clamp-[8]">{note.content}</p>
                     </div>
 
                     <div className="pt-3 mt-3 border-t border-black/5 flex justify-end items-center text-[10px] opacity-70">
@@ -348,7 +347,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* TAKVİM VE GOOGLE TAKVİM ENTEGRASYONU */
+          /* TAKVİM */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
@@ -535,11 +534,11 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
             <h3 className="font-bold text-base text-gray-900">Yeni Defter Oluştur</h3>
-            <form onSubmit={addNotebook} className="space-y-3">
+            <form onSubmit= {addNotebook} className="space-y-3">
               <input type="text" value={newNotebookName} onChange={(e) => setNewNotebookName(e.target.value)} placeholder="Defter adı..." className="w-full border rounded-lg px-3 py-2 text-xs" required />
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setIsNotebookModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">İptal</button>
-                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">Oluştur</button>
+                <button type="submit" className="px-3 py-1.5 bg-deep-teal text-white rounded-lg text-xs">Oluştur</video>
               </div>
             </form>
           </div>

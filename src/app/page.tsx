@@ -38,7 +38,7 @@ export default function Home() {
     }
   };
 
-  // Eğer giriş yapılmadıysa giriş ekranını göster
+ // ... (Giriş yapılmadıysa giriş ekranı kodları burası) ...
   if (!session) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -55,14 +55,31 @@ export default function Home() {
     );
   }
 
-  // ... (Giriş yapılmışsa uygulamanın geri kalanı burada çalışacak) ...
+  // --- BURAYA DİKKAT: Giriş yapıldıysa artık aşağıdakini döndürecek ---
   return (
-    <div className="flex h-screen bg-soft-white text-gray-800 font-sans relative overflow-hidden">
-        {/* Uygulamanın geri kalan gövdesi (Sidebar, Main Panel vb.) buraya gelecek */}
-        <button onClick={() => supabase.auth.signOut()} className="absolute top-4 right-4 text-xs bg-red-100 p-2 rounded">
-          <LogOut size={14}/>
+    <div className="flex h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
+      {/* 1. SOL KENAR ÇUBUĞU */}
+      <aside className="w-52 bg-deep-teal text-white p-4 flex flex-col justify-between shadow-md z-10">
+        {/* ... önceki tüm sidebar kodların buraya gelecek ... */}
+        {/* En alta çıkış butonu */}
+        <button onClick={() => supabase.auth.signOut()} className="mt-4 text-[10px] text-teal-300 hover:text-white flex items-center gap-1">
+          <LogOut size={12}/> Çıkış Yap
         </button>
-        {/* ... önceki tüm uygulama kodların burada olacak ... */}
+      </aside>
+
+      {/* 2. ORTA ALAN */}
+      <main className="flex-1 p-6 bg-white overflow-y-auto flex flex-col relative">
+        {/* ... önceki tüm orta alan kodların (Dashboard / Calendar / OneNote sayfalar) buraya gelecek ... */}
+        <h1 className="text-2xl font-bold">Hoş Geldin!</h1>
+        <p className="text-sm">Sol menüden yeni bir defter oluşturarak başla.</p>
+      </main>
+
+      {/* 3. SAĞ PANEL */}
+      <aside className="w-72 bg-gray-50 border-l border-gray-200 p-5 flex flex-col gap-5 overflow-y-auto z-10">
+        {/* ... önceki görev paneli kodların buraya gelecek ... */}
+      </aside>
+      
+      {/* Modallar buraya eklenecek */}
     </div>
   );
 }

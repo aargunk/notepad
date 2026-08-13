@@ -14,7 +14,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -28,7 +28,7 @@ export default function Home() {
   const [isMobileTasksOpen, setIsMobileTasksOpen] = useState(false);
 
   // DİNAMİK TARİH STATE'LERİ
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 10));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
@@ -69,7 +69,7 @@ export default function Home() {
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
 
-  // GOOGLE OAUTH
+  // GOOGLE OAUTH VE GERÇEK KONTROL
   const [userSession, setUserSession] = useState<any>(null);
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -92,9 +92,51 @@ export default function Home() {
     const { data: { session } } = await supabase.auth.getSession();
     setUserSession(session);
 
+    if (session?.provider_token) {
+      fetchGoogleCalendarEvents(session.provider_token);
+    }
+
     supabase.auth.onAuthStateChange((_event, session) => {
       setUserSession(session);
+      if (session?.provider_token) {
+        fetchGoogleCalendarEvents(session.provider_token);
+      }
     });
+  };
+
+  // GOOGLE CALENDAR API'DEN GERÇEK VERİLERİ ÇEKME
+  const fetchGoogleCalendarEvents = async (providerToken: string) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=20&orderBy=startTime&singleEvents=true&timeMin=' + new Date().toISOString(), {
+        headers: {
+          Authorization: `Bearer ${providerToken}`,
+        },
+      });
+      const data = await res.json();
+      if (data.items) {
+        const fetchedGoogleEvents = data.items.map((event: any, idx: number) => ({
+          id: 'gcal-' + (event.id || idx),
+          notebook_name: activeNotebook,
+          title: '📅 ' + (event.summary || 'Google Etkinliği'),
+          content: event.description || 'Google Calendar üzerinden çekildi.',
+          day_index: event.start?.dateTime ? new Date(event.start.dateTime).getDay() : 0,
+          time: event.start?.dateTime ? new Date(event.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00',
+          color: 'bg-sky-50 border-sky-200 text-sky-950',
+          badge_color: 'bg-sky-200 text-sky-900',
+        }));
+
+        setNotes(prev => {
+          const existingIds = new Set(prev.map(n => n.id));
+          const uniqueEvents = fetchedGoogleEvents.filter((g: any) => !existingIds.has(g.id));
+          return [...prev, ...uniqueEvents];
+        });
+      }
+    } catch (err) {
+      console.error("Google Calendar verileri çekilemedi:", err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
@@ -118,6 +160,7 @@ export default function Home() {
     setUserSession(null);
   };
 
+  // TAM DİNAMİK TARİH DEĞİŞİMİ
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
     if (calendarMode === 'week') {
@@ -718,7 +761,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* DİNAMİK TAKVİM */
+          /* DİNAMİK TAKVİM (AY VE YIL AKIŞI DÜZELTİLDİ) */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -726,8 +769,8 @@ export default function Home() {
                   Bugün
                 </button>
                 <div className="flex items-center gap-1">
-                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronLeft size={18} /></button>
-                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronRight size={18} /></button>
+                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Önceki"><ChevronLeft size={18} /></button>
+                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Sonraki"><ChevronRight size={18} /></button>
                 </div>
                 <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight">
                   {MONTH_NAMES[currentMonthVal]} {currentYearVal}
@@ -840,7 +883,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 3. SAĞ PANEL (GÖREVLER) */}
+      {/* 3. SAĞ PANEL */}
       <aside className={`fixed md:relative inset-y-0 right-0 w-72 bg-gray-50 border-l border-gray-200 p-5 flex flex-col gap-5 overflow-y-auto z-30 transition-transform duration-300 ${isMobileTasksOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
         <div className="flex justify-between items-center md:hidden pb-2 border-b">
           <h3 className="font-bold text-xs text-gray-800">Görevler</h3>

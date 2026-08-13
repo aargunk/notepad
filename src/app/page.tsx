@@ -111,8 +111,10 @@ export default function Home() {
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
 
-  // SES TANIMA (SPEECH TO TEXT) MOTORU
+  // SES TANIMA (SPEECH TO TEXT) MOTORU (SSR UYUMLU)
   const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
+    if (typeof window === 'undefined') return;
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
@@ -205,13 +207,13 @@ export default function Home() {
       image_url: drawingData
     };
 
-    const { data } = await supabase
+    const { data }: any = await supabase
       .from('notes')
       .update({ title: pageTitle, content: pageContent, image_url: drawingData })
       .eq('id', openedNotePage.id)
       .select();
 
-    if (data && data.length > 0) {
+    if (data && Array.isArray(data) && data.length > 0) {
       setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n));
       setOpenedNotePage(data[0]);
     } else {
@@ -231,10 +233,10 @@ export default function Home() {
     let clientX = 0;
     let clientY = 0;
 
-    if ('touches' in e) {
+    if ('touches' in e && e.touches.length > 0) {
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
-    } else {
+    } else if ('clientX' in e) {
       clientX = e.clientX;
       clientY = e.clientY;
     }
@@ -287,8 +289,8 @@ export default function Home() {
   const addNotebook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNotebookName.trim()) return;
-    const { data } = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
-    if (data && data.length > 0) {
+    const { data }: any = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
+    if (data && Array.isArray(data) && data.length > 0) {
       setNotebooks([...notebooks, data[0]]);
       setActiveNotebook(data[0].name);
     } else {
@@ -316,15 +318,15 @@ export default function Home() {
   const addTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-    const { data } = await supabase.from('tasks').insert([{ title: newTaskTitle.trim(), completed: false, category: activeNotebook }]).select();
-    if (data && data.length > 0) setTasks([...tasks, data[0]]);
+    const { data }: any = await supabase.from('tasks').insert([{ title: newTaskTitle.trim(), completed: false, category: activeNotebook }]).select();
+    if (data && Array.isArray(data) && data.length > 0) setTasks([...tasks, data[0]]);
     else setTasks([...tasks, { id: Date.now().toString(), title: newTaskTitle.trim(), completed: false }]);
     setNewTaskTitle('');
   };
 
   const toggleTask = async (id: string, currentStatus: boolean) => {
-    const { data } = await supabase.from('tasks').update({ completed: !currentStatus }).eq('id', id).select();
-    if (data && data.length > 0) setTasks(tasks.map(t => t.id === id ? data[0] : t));
+    const { data }: any = await supabase.from('tasks').update({ completed: !currentStatus }).eq('id', id).select();
+    if (data && Array.isArray(data) && data.length > 0) setTasks(tasks.map(t => t.id === id ? data[0] : t));
     else setTasks(tasks.map(t => t.id === id ? { ...t, completed: !currentStatus } : t));
   };
 
@@ -352,14 +354,14 @@ export default function Home() {
     };
 
     if (isEditMode && editingNoteId) {
-      const { data } = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
-      if (data && data.length > 0) {
+      const { data }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
+      if (data && Array.isArray(data) && data.length > 0) {
         setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n));
         if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]);
       }
     } else {
-      const { data } = await supabase.from('notes').insert([notePayload]).select();
-      if (data && data.length > 0) setNotes([...notes, data[0]]);
+      const { data }: any = await supabase.from('notes').insert([notePayload]).select();
+      if (data && Array.isArray(data) && data.length > 0) setNotes([...notes, data[0]]);
       else setNotes([...notes, { ...notePayload, id: Date.now().toString() }]);
     }
     resetForm();
@@ -383,7 +385,6 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
-  // VERCEL DERLEME HATASININ DÜZELTİLDİĞİ KISIM (.select() eklendi)
   const handleConnectGoogleCalendar = () => {
     setIsSyncing(true);
     setTimeout(() => {
@@ -399,7 +400,7 @@ export default function Home() {
         badge_color: 'bg-sky-200 text-sky-900',
       };
       supabase.from('notes').insert([googleEvent]).select().then(({ data }: any) => {
-        if (data && data.length > 0) setNotes(prev => [...prev, data[0]]);
+        if (data && Array.isArray(data) && data.length > 0) setNotes(prev => [...prev, data[0]]);
         else fetchData();
       });
     }, 1200);

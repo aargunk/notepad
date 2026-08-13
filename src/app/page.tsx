@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Book, Plus, CheckSquare, FileText, Calendar as CalendarIcon, 
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
-  ShieldAlert, Save, PenTool, Eraser 
+  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff 
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -27,6 +27,11 @@ export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
+
+  // SES İLE METİN YAZMA STATE'LERİ & REF'İ
+  const [isListening, setIsListening] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent' | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
@@ -74,7 +79,6 @@ export default function Home() {
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
 
-      // Eğer önceden var olan bir çizim görseli varsa Canvas üzerine yükle
       if (openedNotePage?.image_url) {
         const ctx = canvas.getContext('2d');
         const img = new Image();
@@ -85,6 +89,64 @@ export default function Home() {
       }
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
+
+  // SES TANIMA (SPEECH TO TEXT) MOTORUNUN HAZIRLANMASI
+  const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
+    // Tarayıcı Desteği Kontrolü
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Tarayıcınız ses tanıma özelliğini desteklemiyor. Lütfen Chrome, Edge veya Safari kullanın.");
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      setListeningTarget(null);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'tr-TR';
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setListeningTarget(target);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript;
+
+      if (target === 'modalTitle') {
+        setNewTitle(prev => (prev ? prev + ' ' + transcript : transcript));
+      } else if (target === 'modalContent') {
+        setNewContent(prev => (prev ? prev + ' ' + transcript : transcript));
+      } else if (target === 'pageTitle') {
+        setPageTitle(prev => (prev ? prev + ' ' + transcript : transcript));
+      } else if (target === 'pageContent') {
+        setPageContent(prev => (prev ? prev + '\n' + transcript : transcript));
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Ses tanıma hatası:", event.error);
+      setIsListening(false);
+      setListeningTarget(null);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setListeningTarget(null);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
 
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
@@ -413,17 +475,28 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 {isInlineEditing ? (
                   <>
+                    {/* Sesle Sayfa İçeriğini Konuşarak Yazma Düğmesi */}
+                    <button 
+                      onClick={() => toggleListening('pageContent')} 
+                      className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-all ${isListening && listeningTarget === 'pageContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'}`}
+                    >
+                      {isListening && listeningTarget === 'pageContent' ? <MicOff size={14} /> : <Mic size={14} />}
+                      {isListening && listeningTarget === 'pageContent' ? 'Dinleniyor...' : '🎙️ Sesle Yazdır'}
+                    </button>
+
                     <button 
                       onClick={() => setIsDrawingMode(!isDrawingMode)} 
                       className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium transition-colors ${isDrawingMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                     >
                       <PenTool size={14} /> {isDrawingMode ? 'Metin Moduna Geç' : '✏️ Çizim Yap'}
                     </button>
+
                     {isDrawingMode && (
                       <button onClick={clearCanvas} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1">
                         <Eraser size={14} /> Temizle
                       </button>
                     )}
+
                     <button onClick={handleSaveInline} className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 font-bold shadow-xs">
                       <Save size={14} /> Kaydet
                     </button>
@@ -468,12 +541,22 @@ export default function Home() {
 
               <div className="flex justify-between items-start mb-4 relative z-10">
                 {isInlineEditing ? (
-                  <input 
-                    type="text" 
-                    value={pageTitle} 
-                    onChange={(e) => setPageTitle(e.target.value)}
-                    className="text-3xl font-bold text-gray-900 font-serif bg-white/70 border border-teal-300 rounded px-2 py-1 outline-none w-2/3"
-                  />
+                  <div className="flex items-center gap-2 w-2/3">
+                    <input 
+                      type="text" 
+                      value={pageTitle} 
+                      onChange={(e) => setPageTitle(e.target.value)}
+                      className="text-3xl font-bold text-gray-900 font-serif bg-white/70 border border-teal-300 rounded px-2 py-1 outline-none flex-1"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => toggleListening('pageTitle')} 
+                      className={`p-2 rounded-lg border text-xs transition-colors ${isListening && listeningTarget === 'pageTitle' ? 'bg-red-600 text-white animate-pulse' : 'bg-white text-gray-700 border-gray-300'}`}
+                      title="Başlığı Sesle Söyle"
+                    >
+                      <Mic size={16} />
+                    </button>
+                  </div>
                 ) : (
                   <h1 className="text-3xl font-bold text-gray-900 tracking-tight font-serif">{openedNotePage.title}</h1>
                 )}
@@ -668,19 +751,59 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT MODALI */}
+      {/* YENİ NOT MODALI (SESLE YAZMA DESTEKLİ) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
             <h3 className="font-bold text-base text-gray-900">{isEditMode ? 'Not Kartını Düzenle' : 'Yeni Not Kartı Ekle'}</h3>
             <form onSubmit={saveNote} className="space-y-3">
+              
+              {/* BAŞLIK ALANI & SESLE YAZMA */}
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Başlık</label>
-                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Başlık yazın..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none" required />
+                <label className="text-xs text-gray-500 flex justify-between items-center mb-1">
+                  <span>Başlık</span>
+                  <span className="text-[10px] text-teal-700">🎙️ Sesle Söyle</span>
+                </label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newTitle} 
+                    onChange={(e) => setNewTitle(e.target.value)} 
+                    placeholder="Başlık yazın..." 
+                    className="w-full border rounded-lg px-3 py-2 text-xs outline-none" 
+                    required 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => toggleListening('modalTitle')} 
+                    className={`p-2 rounded-lg border text-xs transition-colors flex items-center justify-center ${isListening && listeningTarget === 'modalTitle' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                  >
+                    <Mic size={16} />
+                  </button>
+                </div>
               </div>
+
+              {/* İÇERİK ALANI & SESLE YAZMA */}
               <div>
-                <label className="text-xs text-gray-500 block mb-1">İçerik</label>
-                <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder="Detaylar..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none h-24 resize-none" />
+                <label className="text-xs text-gray-500 flex justify-between items-center mb-1">
+                  <span>İçerik</span>
+                  <span className="text-[10px] text-teal-700">🎙️ Sesle Konuşarak Ekle</span>
+                </label>
+                <div className="relative">
+                  <textarea 
+                    value={newContent} 
+                    onChange={(e) => setNewContent(e.target.value)} 
+                    placeholder="Detaylar..." 
+                    className="w-full border rounded-lg px-3 py-2 text-xs outline-none h-28 resize-none pr-10" 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => toggleListening('modalContent')} 
+                    className={`absolute right-2 top-2 p-1.5 rounded-lg border text-xs transition-colors ${isListening && listeningTarget === 'modalContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'}`}
+                  >
+                    <Mic size={14} />
+                  </button>
+                </div>
               </div>
 
               <div>

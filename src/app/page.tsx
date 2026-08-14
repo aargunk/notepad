@@ -14,7 +14,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -249,7 +249,7 @@ export default function Home() {
     setGoogleCalendarEvents([]);
   };
 
-  // GEMINI AI CHATBOT FONKSİYONU (BACKEND API ROUTE UYUMLU)
+  // GEMINI AI CHATBOT FONKSİYONU (BACKEND ROUTE İLE GÜVENLİ ÇAĞRI)
   const handleSendGemini = async (overridePrompt?: string) => {
     const promptToSend = overridePrompt || geminiInput;
     if (!promptToSend.trim() || isGeminiLoading) return;
@@ -275,19 +275,20 @@ export default function Home() {
       const res = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ prompt: fullPrompt }),
       });
 
       const data = await res.json();
 
-      if (data.error) {
-        setGeminiMessages(prev => [...prev, { role: 'model', text: `Hata: ${data.error}` }]);
+      if (!res.ok || data.error) {
+        setGeminiMessages(prev => [...prev, { role: 'model', text: `Hata: ${data.error || 'Yanıt alınamadı.'}` }]);
       } else {
         setGeminiMessages(prev => [...prev, { role: 'model', text: data.text }]);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Gemini AI Hatası:", err);
-      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.' }]);
+      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Sunucuya bağlanırken bir hata oluştu.' }]);
     } finally {
       setIsGeminiLoading(false);
     }
@@ -1225,7 +1226,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h4 className="font-bold text-xs flex items-center gap-1">
-                    Gemini AI Asistan <span className="text-[9px] bg-rose-500/80 text-white px-1.5 py-0.2 rounded font-mono">1.5 Flash</span>
+                    Gemini AI Asistan <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-mono">2.0 Flash</span>
                   </h4>
                   <p className="text-[10px] text-teal-200">
                     {openedNotePage ? `Bağlam: "${openedNotePage.title}"` : 'Genel Asistan Modu'}

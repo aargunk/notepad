@@ -1,3 +1,11 @@
+// Eğer kullanıcı yoksa doğrudan login ekranına git (Dashboard'u render etme)
+if (!userSession) {
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#042f2e] via-[#0d9488] to-[#0f172a] p-4 font-sans">
+      {/* Giriş Ekranı Kodu Burada */}
+    </div>
+  );
+}
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { 

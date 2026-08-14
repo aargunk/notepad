@@ -4,7 +4,7 @@ import {
   Book, Plus, CheckSquare, Calendar as CalendarIcon, 
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
-  ChevronLeft, ChevronRight, Menu, X 
+  ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -12,9 +12,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -136,6 +138,15 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
 
+  // GEMINI AI CHATBOT STATE'LERİ
+  const [isGeminiOpen, setIsGeminiOpen] = useState(false);
+  const [geminiMessages, setGeminiMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([
+    { role: 'model', text: 'Merhaba! Ben Gemini AI Asistanınız. Açık olan notunuz hakkında sorular sorabilir, metin düzenleme ve özetleme isteyebilirsiniz.' }
+  ]);
+  const [geminiInput, setGeminiInput] = useState('');
+  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+
   const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
 
   const colorOptions = [
@@ -149,6 +160,12 @@ export default function Home() {
     fetchData();
     checkUserSession();
   }, []);
+
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [geminiMessages]);
 
   const checkUserSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -234,7 +251,55 @@ export default function Home() {
     setGoogleCalendarEvents([]);
   };
 
-  // DİNAMİK TARİH NAVİGASYONU (GÜN, HAFTA VE AY UYUMLU)
+  // GEMINI AI CHATBOT FONKSİYONU (NOT BAĞLAMI OKUMA VE YANIT ÜRETME)
+  const handleSendGemini = async (overridePrompt?: string) => {
+    const promptToSend = overridePrompt || geminiInput;
+    if (!promptToSend.trim() || isGeminiLoading) return;
+
+    if (!userSession) {
+      alert("Gemini AI Asistanını kullanabilmek için lütfen Google hesabınızla giriş yapın.");
+      return;
+    }
+
+    if (!GEMINI_API_KEY) {
+      alert("NEXT_PUBLIC_GEMINI_API_KEY Vercel ortam değişkenlerinde bulunamadı. Lütfen API Key ekleyin.");
+      return;
+    }
+
+    const userMessage = { role: 'user' as const, text: promptToSend };
+    setGeminiMessages(prev => [...prev, userMessage]);
+    if (!overridePrompt) setGeminiInput('');
+    setIsGeminiLoading(true);
+
+    try {
+      let contextText = '';
+      if (openedNotePage) {
+        contextText = `\n\n[ŞU ANDA AÇIK OLAN NOT]\nBaşlık: ${openedNotePage.title}\nİçerik: ${openedNotePage.content}\n\n`;
+      }
+
+      const fullPrompt = `Sen Notepad Pro uygulamasının akıllı AI asistanısın. Kullanıcıya Türkçe, nazik ve üretken bir şekilde yardımcı ol.${contextText}Kullanıcının sorusu / talebi: ${promptToSend}`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }]
+        })
+      });
+
+      const data = await res.json();
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Gemini yanıt oluşturamadı. Lütfen tekrar deneyin.';
+
+      setGeminiMessages(prev => [...prev, { role: 'model', text: responseText }]);
+    } catch (err) {
+      console.error("Gemini AI Hatası:", err);
+      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Üzgünüm, bir hata oluştu. Lütfen internet bağlantınızı ve API anahtarınızı kontrol edin.' }]);
+    } finally {
+      setIsGeminiLoading(false);
+    }
+  };
+
+  // DİNAMİK TARİH NAVİGASYONU
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
     if (calendarMode === 'day') {
@@ -575,18 +640,16 @@ export default function Home() {
 
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
-  // SEÇİLİ TARİH HESAPLAMALARI
   const currentYearVal = currentDate.getFullYear();
   const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
   const firstDayOfMonthIndex = (new Date(currentYearVal, currentMonthVal, 1).getDay() + 6) % 7;
 
-  // HAFTALIK DİNAMİK GÜNLERİN HESAPLANMASI
   const getWeekDays = (baseDate: Date) => {
     const days = [];
     const curr = new Date(baseDate);
-    const dayOfWeek = (curr.getDay() + 6) % 7; // Pazartesi=0
-    curr.setDate(curr.getDate() - dayOfWeek); // Pazartesiye git
+    const dayOfWeek = (curr.getDay() + 6) % 7;
+    curr.setDate(curr.getDate() - dayOfWeek);
 
     for (let i = 0; i < 7; i++) {
       days.push(new Date(curr));
@@ -859,7 +922,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* İLERİ DÜZEY TAKVİM (GÜN / HAFTA / AY MODLARI VE TAM NAVİGASYON) */
+          /* İLERİ DÜZEY TAKVİM */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -922,7 +985,7 @@ export default function Home() {
 
             <div className="flex-1 overflow-auto">
               {calendarMode === 'day' ? (
-                /* GÜNLÜK ÖZEL ODANMIŞ GÖRÜNÜM (GÜNE TIKLANINCA AÇILAN ALAN) */
+                /* GÜNLÜK ÖZEL GÖRÜNÜM */
                 <div className="flex flex-col h-full bg-white p-4 max-w-3xl mx-auto">
                   <div className="flex justify-between items-center pb-3 border-b mb-4">
                     <div>
@@ -993,7 +1056,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : calendarMode === 'week' ? (
-                /* HAFTALIK DİNAMİK NAVİGASYONLU GÖRÜNÜM */
+                /* HAFTALIK DİNAMİK GÖRÜNÜM */
                 <div className="flex flex-col min-w-[700px] h-full">
                   <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
                     <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
@@ -1055,7 +1118,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* AYLIK GÖRÜNÜM (GÜNE TIKLANINCA GÜN MODUNA GEÇİŞ ENTEGRELİ) */
+                /* AYLIK GÖRÜNÜM */
                 <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
                   {DAY_NAMES.map(d => (
                     <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">
@@ -1155,6 +1218,130 @@ export default function Home() {
           </div>
         </div>
       </aside>
+
+      {/* GEMINI AI ASİSTAN CHATBOT WIDGET'I (SAĞ ALT KÖŞE) */}
+      <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end">
+        {isGeminiOpen && (
+          <div className="mb-3 w-80 md:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col h-[480px] overflow-hidden animate-fadeIn">
+            {/* Chatbot Header */}
+            <div className="bg-gradient-to-r from-teal-950 via-teal-900 to-black text-white p-3.5 flex justify-between items-center shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="bg-gradient-to-tr from-rose-500 to-teal-400 p-1.5 rounded-lg">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs flex items-center gap-1">
+                    Gemini AI Asistan <span className="text-[9px] bg-rose-500/80 text-white px-1.5 py-0.2 rounded font-mono">1.5 Flash</span>
+                  </h4>
+                  <p className="text-[10px] text-teal-200">
+                    {openedNotePage ? `Bağlam: "${openedNotePage.title}"` : 'Genel Asistan Modu'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsGeminiOpen(false)} className="text-teal-200 hover:text-white p-1">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Chat Message List */}
+            <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-gray-50/50 text-xs">
+              {!userSession ? (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2 my-auto">
+                  <Lock size={24} className="text-amber-600 mx-auto" />
+                  <p className="font-bold text-gray-800">Google Hesabı Gerekli</p>
+                  <p className="text-[11px] text-gray-600">Gemini AI Asistanını kullanabilmek için lütfen Google hesabınızla oturum açın.</p>
+                  <button onClick={handleGoogleLogin} className="w-full bg-teal-900 text-white py-2 rounded-lg font-semibold text-xs shadow-sm">
+                    🌐 Google ile Giriş Yap
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {geminiMessages.map((msg, idx) => (
+                    <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'model' && (
+                        <div className="w-6 h-6 rounded-full bg-teal-900 text-white flex items-center justify-center shrink-0 mt-0.5">
+                          <Bot size={13} />
+                        </div>
+                      )}
+                      <div className={`p-2.5 rounded-2xl max-w-[82%] leading-relaxed ${msg.role === 'user' ? 'bg-teal-900 text-white rounded-br-none' : 'bg-white border text-gray-800 shadow-2xs rounded-bl-none whitespace-pre-wrap'}`}>
+                        {msg.text}
+                      </div>
+                      {msg.role === 'user' && (
+                        <div className="w-6 h-6 rounded-full bg-gray-300 text-gray-700 flex items-center justify-center shrink-0 mt-0.5">
+                          <User size={13} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {isGeminiLoading && (
+                    <div className="flex gap-2 items-center text-gray-400 italic">
+                      <Bot size={14} className="animate-spin text-teal-700" />
+                      <span>Gemini düşünüyor...</span>
+                    </div>
+                  )}
+                  <div ref={chatBottomRef} />
+                </>
+              )}
+            </div>
+
+            {/* Quick Actions (Açık Not Varsa) */}
+            {userSession && openedNotePage && (
+              <div className="px-2 py-1.5 bg-gray-100/80 border-t flex gap-1 overflow-x-auto text-[10px]">
+                <button 
+                  onClick={() => handleSendGemini("Bu notu 3 kısa maddede özetle.")}
+                  className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 flex items-center gap-1 font-medium shadow-2xs"
+                >
+                  📝 Notu Özetle
+                </button>
+                <button 
+                  onClick={() => handleSendGemini("Bu nottaki imla hatalarını düzelt ve üslubu geliştirilmiş versiyonunu öner.")}
+                  className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 flex items-center gap-1 font-medium shadow-2xs"
+                >
+                  ✍️ Yazımı Düzenle
+                </button>
+                <button 
+                  onClick={() => handleSendGemini("Bu notun içinden yapılacak işleri listele.")}
+                  className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 flex items-center gap-1 font-medium shadow-2xs"
+                >
+                  📋 Görev Çıkar
+                </button>
+              </div>
+            )}
+
+            {/* Chat Input */}
+            {userSession && (
+              <div className="p-2 bg-white border-t flex gap-1.5 items-center">
+                <input 
+                  type="text" 
+                  value={geminiInput} 
+                  onChange={(e) => setGeminiInput(e.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendGemini()}
+                  placeholder={openedNotePage ? "Notunuzla ilgili bir şey sorun..." : "Gemini'ye sorun..."} 
+                  className="flex-1 border rounded-xl px-3 py-2 text-xs outline-none bg-gray-50 focus:bg-white focus:border-teal-600 transition-colors"
+                />
+                <button 
+                  onClick={() => handleSendGemini()}
+                  disabled={isGeminiLoading || !geminiInput.trim()} 
+                  className="bg-teal-900 hover:bg-teal-800 disabled:opacity-40 text-white p-2 rounded-xl transition-all"
+                >
+                  <Send size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Gemini Toggle Butonu */}
+        <button 
+          onClick={() => setIsGeminiOpen(!isGeminiOpen)}
+          className="bg-gradient-to-r from-teal-950 via-teal-900 to-black hover:scale-105 text-white p-3.5 rounded-2xl shadow-xl border border-teal-500/40 flex items-center gap-2 font-bold text-xs transition-all group"
+        >
+          <div className="bg-gradient-to-tr from-rose-500 to-teal-400 p-1 rounded-lg">
+            <Sparkles size={18} className="text-white animate-pulse" />
+          </div>
+          <span className="hidden md:inline">Gemini AI</span>
+        </button>
+      </div>
 
       {/* GOOGLE OAUTH MODALI */}
       {isCalendarSettingsOpen && (

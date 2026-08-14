@@ -9,30 +9,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'GEMINI_API_KEY sunucuda bulunamadı.' }, { status: 500 });
     }
 
-    // Doğrudan yeni ve kararlı gemini-2.0-flash endpoint kullanımı
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
+    // Google'ın güncel ve aktif Flash modelleri
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          return NextResponse.json({ 
+            text: data.candidates[0].content.parts[0].text,
+            modelUsed: modelName 
+          });
+        } else {
+          lastError = data.error?.message || `${modelName} yanıt veremedi.`;
+        }
+      } catch (err: any) {
+        lastError = err.message;
       }
-    );
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error('Gemini API Hatası:', data);
-      return NextResponse.json(
-        { error: data.error?.message || 'Gemini API servis hatası.' },
-        { status: res.status }
-      );
     }
 
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Yanıt üretilemedi.';
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json(
+      { error: `Modeller yanıt vermedi: ${lastError}` },
+      { status: 400 }
+    );
 
   } catch (error: any) {
     console.error('Sunucu Hatası:', error);

@@ -18,7 +18,7 @@ const MONTH_NAMES = [
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
-// NETFLIX & FUTURISTIC ESİNTİLİ 'N' LOGO BİLEŞENİ
+// NETFLIX & FUTURISTIC 'N' LOGO BİLEŞENİ
 function Logo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 select-none cursor-pointer group">
@@ -89,9 +89,9 @@ export default function Home() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileTasksOpen, setIsMobileTasksOpen] = useState(false);
 
-  // DİNAMİK TARİH VE NAVİGASYON STATE'LERİ
+  // DİNAMİK TARİH VE MOD STATE'LERİ
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('month');
+  const [calendarMode, setCalendarMode] = useState<'day' | 'week' | 'month'>('month');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
@@ -166,12 +166,11 @@ export default function Home() {
     });
   };
 
-  // GERÇEK GOOGLE CALENDAR API VERİ ÇEKME MOTORU
   const fetchGoogleCalendarEvents = async (providerToken: string) => {
     setIsSyncing(true);
     try {
-      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
-      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString();
+      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0, 23, 59, 59).toISOString();
 
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${timeMin}&timeMax=${timeMax}`, 
@@ -179,6 +178,7 @@ export default function Home() {
           headers: { Authorization: `Bearer ${providerToken}` }
         }
       );
+
       const data = await res.json();
       if (data.items) {
         const events = data.items.map((item: any) => {
@@ -189,6 +189,8 @@ export default function Home() {
             content: item.description || 'Google Calendar etkinliği.',
             date: startDate,
             dayNumber: startDate.getDate(),
+            monthNumber: startDate.getMonth(),
+            yearNumber: startDate.getFullYear(),
             time: item.start?.dateTime ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Tüm Gün',
             color: 'bg-sky-100 border-sky-300 text-sky-950',
             badge_color: 'bg-sky-200 text-sky-900',
@@ -212,6 +214,10 @@ export default function Home() {
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
         redirectTo: redirectToUrl,
       },
     });
@@ -228,10 +234,12 @@ export default function Home() {
     setGoogleCalendarEvents([]);
   };
 
-  // DİNAMİK TARİH GEZİNTİSİ
+  // DİNAMİK TARİH NAVİGASYONU (GÜN, HAFTA VE AY UYUMLU)
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
-    if (calendarMode === 'week') {
+    if (calendarMode === 'day') {
+      next.setDate(next.getDate() - 1);
+    } else if (calendarMode === 'week') {
       next.setDate(next.getDate() - 7);
     } else {
       next.setMonth(next.getMonth() - 1);
@@ -242,7 +250,9 @@ export default function Home() {
 
   const handleNextPeriod = () => {
     const next = new Date(currentDate);
-    if (calendarMode === 'week') {
+    if (calendarMode === 'day') {
+      next.setDate(next.getDate() + 1);
+    } else if (calendarMode === 'week') {
       next.setDate(next.getDate() + 7);
     } else {
       next.setMonth(next.getMonth() + 1);
@@ -255,6 +265,12 @@ export default function Home() {
     const today = new Date();
     setCurrentDate(today);
     if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
+  };
+
+  const handleSelectDay = (dayNum: number) => {
+    const selectedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayNum);
+    setCurrentDate(selectedDate);
+    setCalendarMode('day');
   };
 
   const handleDragStart = (index: number) => {
@@ -559,11 +575,27 @@ export default function Home() {
 
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
-  // SEÇİLİ AYIN DİNAMİK HESAPLANMASI
+  // SEÇİLİ TARİH HESAPLAMALARI
   const currentYearVal = currentDate.getFullYear();
   const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
-  const firstDayOfMonthIndex = (new Date(currentYearVal, currentMonthVal, 1).getDay() + 6) % 7; // Pzt=0 Yapılandırması
+  const firstDayOfMonthIndex = (new Date(currentYearVal, currentMonthVal, 1).getDay() + 6) % 7;
+
+  // HAFTALIK DİNAMİK GÜNLERİN HESAPLANMASI
+  const getWeekDays = (baseDate: Date) => {
+    const days = [];
+    const curr = new Date(baseDate);
+    const dayOfWeek = (curr.getDay() + 6) % 7; // Pazartesi=0
+    curr.setDate(curr.getDate() - dayOfWeek); // Pazartesiye git
+
+    for (let i = 0; i < 7; i++) {
+      days.push(new Date(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+    return days;
+  };
+
+  const weekDays = getWeekDays(currentDate);
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
@@ -827,7 +859,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* TAM DİNAMİK VE GERÇEK SENKRONİZASYONLU TAKVİM */
+          /* İLERİ DÜZEY TAKVİM (GÜN / HAFTA / AY MODLARI VE TAM NAVİGASYON) */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -835,16 +867,28 @@ export default function Home() {
                   Bugün
                 </button>
                 <div className="flex items-center gap-1">
-                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Önceki Ay / Hafta"><ChevronLeft size={18} /></button>
-                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Sonraki Ay / Hafta"><ChevronRight size={18} /></button>
+                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Geri"><ChevronLeft size={18} /></button>
+                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="İleri"><ChevronRight size={18} /></button>
                 </div>
                 <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight">
-                  {MONTH_NAMES[currentMonthVal]} {currentYearVal}
+                  {calendarMode === 'day' ? (
+                    `${currentDate.getDate()} ${MONTH_NAMES[currentMonthVal]} ${currentYearVal}`
+                  ) : calendarMode === 'week' ? (
+                    `${weekDays[0].getDate()} ${MONTH_NAMES[weekDays[0].getMonth()]} - ${weekDays[6].getDate()} ${MONTH_NAMES[weekDays[6].getMonth()]} ${currentYearVal}`
+                  ) : (
+                    `${MONTH_NAMES[currentMonthVal]} ${currentYearVal}`
+                  )}
                 </h2>
               </div>
               
               <div className="flex items-center gap-2">
                 <div className="flex bg-gray-200/80 p-1 rounded-xl text-xs font-semibold text-gray-600">
+                  <button 
+                    onClick={() => setCalendarMode('day')}
+                    className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'day' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}
+                  >
+                    Gün
+                  </button>
                   <button 
                     onClick={() => setCalendarMode('week')}
                     className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}
@@ -877,35 +921,130 @@ export default function Home() {
             </header>
 
             <div className="flex-1 overflow-auto">
-              {calendarMode === 'week' ? (
-                /* HAFTALIK GÖRÜNÜM */
-                <div className="flex flex-col min-w-[650px]">
-                  <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
-                    <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
-                    {DAY_NAMES.map((day, idx) => (
-                      <div key={day} className="py-2.5 text-xs font-bold border-r border-gray-200 text-gray-700">
-                        {day}
-                      </div>
-                    ))}
+              {calendarMode === 'day' ? (
+                /* GÜNLÜK ÖZEL ODANMIŞ GÖRÜNÜM (GÜNE TIKLANINCA AÇILAN ALAN) */
+                <div className="flex flex-col h-full bg-white p-4 max-w-3xl mx-auto">
+                  <div className="flex justify-between items-center pb-3 border-b mb-4">
+                    <div>
+                      <span className="text-xs font-bold text-teal-700 uppercase tracking-wider">
+                        {DAY_NAMES[(currentDate.getDay() + 6) % 7]}
+                      </span>
+                      <h3 className="text-xl font-extrabold text-gray-900">
+                        {currentDate.getDate()} {MONTH_NAMES[currentMonthVal]} {currentYearVal}
+                      </h3>
+                    </div>
+                    <button 
+                      onClick={() => setCalendarMode('month')} 
+                      className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg font-medium text-gray-700"
+                    >
+                      Aylık Görünüme Dön
+                    </button>
                   </div>
 
-                  <div className="divide-y divide-gray-100">
+                  <div className="space-y-3 divide-y divide-gray-100 flex-1 overflow-y-auto pr-1">
+                    {hours.map(hour => {
+                      const dayOfWeekIndex = (currentDate.getDay() + 6) % 7;
+                      const matchedNotes = notes.filter(n => n.day_index === dayOfWeekIndex && n.time === hour);
+                      const matchedGoogleEvents = googleCalendarEvents.filter(
+                        g => g.dayNumber === currentDate.getDate() && 
+                             g.monthNumber === currentDate.getMonth() && 
+                             g.yearNumber === currentDate.getFullYear() &&
+                             (g.time === hour || g.time === 'Tüm Gün')
+                      );
+
+                      return (
+                        <div key={hour} className="pt-2 flex gap-4 items-start min-h-[60px]">
+                          <span className="text-xs font-semibold text-gray-400 w-12 pt-1">{hour}</span>
+                          <div className="flex-1 space-y-1.5">
+                            {matchedNotes.map(note => (
+                              <div 
+                                key={note.id} 
+                                onClick={() => handleOpenPage(note)}
+                                className={`${note.color || 'bg-amber-100'} p-2.5 rounded-xl border text-xs font-medium cursor-pointer shadow-2xs hover:shadow-xs transition-shadow flex justify-between items-center`}
+                              >
+                                <div>
+                                  <p className="font-bold text-gray-900">{note.title}</p>
+                                  <p className="text-[11px] text-gray-700 opacity-90 line-clamp-1">{note.content}</p>
+                                </div>
+                                <span className="text-[10px] bg-white/60 px-2 py-0.5 rounded font-bold">Uygulama Notu</span>
+                              </div>
+                            ))}
+
+                            {matchedGoogleEvents.map(gEvent => (
+                              <div 
+                                key={gEvent.id} 
+                                className={`${gEvent.color} p-2.5 rounded-xl border border-sky-300 text-xs font-medium cursor-pointer shadow-2xs hover:shadow-xs transition-shadow flex justify-between items-center`}
+                              >
+                                <div>
+                                  <p className="font-bold text-sky-950">{gEvent.title}</p>
+                                  <p className="text-[11px] text-sky-900 opacity-90">{gEvent.content}</p>
+                                </div>
+                                <span className="text-[10px] bg-sky-200 text-sky-900 px-2 py-0.5 rounded font-bold">Google Calendar</span>
+                              </div>
+                            ))}
+
+                            {matchedNotes.length === 0 && matchedGoogleEvents.length === 0 && (
+                              <div className="h-full border-b border-dashed border-gray-100 min-h-[24px]" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : calendarMode === 'week' ? (
+                /* HAFTALIK DİNAMİK NAVİGASYONLU GÖRÜNÜM */
+                <div className="flex flex-col min-w-[700px] h-full">
+                  <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
+                    <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
+                    {weekDays.map((wDay, idx) => {
+                      const isToday = wDay.toDateString() === new Date().toDateString();
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => { setCurrentDate(wDay); setCalendarMode('day'); }}
+                          className={`py-2 text-xs cursor-pointer hover:bg-teal-50/50 transition-colors border-r border-gray-200 ${isToday ? 'bg-teal-50 text-teal-900 font-bold' : 'text-gray-700'}`}
+                        >
+                          <div>{DAY_NAMES[idx]}</div>
+                          <div className={`text-sm font-extrabold mt-0.5 ${isToday ? 'text-teal-900' : 'text-gray-800'}`}>{wDay.getDate()}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="divide-y divide-gray-100 flex-1 overflow-y-auto">
                     {hours.map((hour) => (
-                      <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[50px]">
+                      <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[55px]">
                         <div className="text-[11px] text-gray-400 font-medium text-center pt-1 border-r border-gray-200 bg-gray-50/30">
                           {hour}
                         </div>
-                        {DAY_NAMES.map((_, dayIdx) => {
+                        {weekDays.map((wDay, dayIdx) => {
                           const matchedNotes = notes.filter(n => n.day_index === dayIdx && n.time === hour);
+                          const matchedGoogleEvents = googleCalendarEvents.filter(
+                            g => g.dayNumber === wDay.getDate() && 
+                                 g.monthNumber === wDay.getMonth() && 
+                                 g.yearNumber === wDay.getFullYear() &&
+                                 (g.time === hour || g.time === 'Tüm Gün')
+                          );
+
                           return (
-                            <div key={dayIdx} className="border-r border-gray-100 p-1 relative hover:bg-teal-50/20 transition-colors">
+                            <div key={dayIdx} className="border-r border-gray-100 p-1 relative hover:bg-teal-50/20 transition-colors flex flex-col gap-1">
                               {matchedNotes.map(note => (
                                 <div 
                                   key={note.id} 
                                   onClick={() => handleOpenPage(note)}
-                                  className={`${note.color || 'bg-teal-100'} p-1.5 rounded-md text-[11px] font-semibold border border-black/10 cursor-pointer shadow-xs truncate`}
+                                  className={`${note.color || 'bg-teal-100'} p-1 rounded text-[10px] font-semibold border border-black/10 cursor-pointer shadow-2xs truncate`}
                                 >
                                   {note.title}
+                                </div>
+                              ))}
+
+                              {matchedGoogleEvents.map(gEvent => (
+                                <div 
+                                  key={gEvent.id} 
+                                  className={`${gEvent.color} p-1 rounded text-[10px] font-semibold border border-sky-300 cursor-pointer shadow-2xs truncate`}
+                                >
+                                  {gEvent.title}
                                 </div>
                               ))}
                             </div>
@@ -916,7 +1055,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* AYLIK DİNAMİK IZGARA (TÜM AY VE YILLAR İÇİN TAM DİZİLİM) */
+                /* AYLIK GÖRÜNÜM (GÜNE TIKLANINCA GÜN MODUNA GEÇİŞ ENTEGRELİ) */
                 <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
                   {DAY_NAMES.map(d => (
                     <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">
@@ -924,16 +1063,19 @@ export default function Home() {
                     </div>
                   ))}
                   
-                  {/* Ayın İlk Gününe Kadar Olan Boşluklar */}
                   {Array.from({ length: firstDayOfMonthIndex }).map((_, i) => (
                     <div key={'empty-' + i} className="min-h-[85px] bg-gray-50/30 p-1" />
                   ))}
 
-                  {/* Seçili Ayın Günleri */}
                   {Array.from({ length: daysInMonth }).map((_, i) => {
                     const dayNum = i + 1;
-                    const matchedNotes = notes.filter(n => (n.day_index % 7) === ((i + firstDayOfMonthIndex) % 7));
-                    const matchedGoogleEvents = googleCalendarEvents.filter(e => e.dayNumber === dayNum);
+                    const dayOfWeek = (i + firstDayOfMonthIndex) % 7;
+                    const matchedNotes = notes.filter(n => (n.day_index % 7) === dayOfWeek);
+                    const matchedGoogleEvents = googleCalendarEvents.filter(
+                      e => e.dayNumber === dayNum && 
+                           e.monthNumber === currentMonthVal && 
+                           e.yearNumber === currentYearVal
+                    );
 
                     const isToday = 
                       new Date().getDate() === dayNum && 
@@ -941,30 +1083,33 @@ export default function Home() {
                       new Date().getFullYear() === currentYearVal;
 
                     return (
-                      <div key={i} className={`min-h-[85px] p-1.5 transition-colors flex flex-col gap-1 overflow-hidden ${isToday ? 'bg-teal-50/40' : 'bg-white hover:bg-gray-50/60'}`}>
+                      <div 
+                        key={i} 
+                        onClick={() => handleSelectDay(dayNum)}
+                        className={`min-h-[85px] p-1.5 transition-all flex flex-col gap-1 overflow-hidden cursor-pointer group ${isToday ? 'bg-teal-50/40 hover:bg-teal-100/50' : 'bg-white hover:bg-teal-50/30'}`}
+                      >
                         <div className="flex justify-between items-center">
-                          <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-teal-900 text-white' : 'text-gray-600'}`}>
+                          <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full group-hover:scale-110 transition-transform ${isToday ? 'bg-teal-900 text-white' : 'text-gray-600'}`}>
                             {dayNum}
                           </span>
+                          <span className="text-[9px] text-gray-400 opacity-0 group-hover:opacity-100 font-semibold transition-opacity">Aç →</span>
                         </div>
                         
                         <div className="flex flex-col gap-1 overflow-y-auto">
-                          {/* Uygulama Notları */}
                           {matchedNotes.slice(0, 2).map(note => (
                             <div 
                               key={note.id} 
-                              onClick={() => handleOpenPage(note)}
-                              className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer`}
+                              onClick={(e) => { e.stopPropagation(); handleOpenPage(note); }}
+                              className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer shadow-2xs`}
                             >
                               {note.title}
                             </div>
                           ))}
 
-                          {/* Gerçek Google Calendar Etkinlikleri */}
-                          {matchedGoogleEvents.map(gEvent => (
+                          {matchedGoogleEvents.slice(0, 2).map(gEvent => (
                             <div 
                               key={gEvent.id}
-                              onClick={() => alert(`Google Etkinliği: ${gEvent.title}\nSaat: ${gEvent.time}\nAçıklama: ${gEvent.content}`)}
+                              onClick={(e) => { e.stopPropagation(); handleSelectDay(dayNum); }}
                               className={`${gEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer border border-sky-300 shadow-2xs`}
                             >
                               {gEvent.title}

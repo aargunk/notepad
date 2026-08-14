@@ -135,6 +135,7 @@ export default function Home() {
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
+  const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<any[]>([]);
 
   // GEMINI AI CHATBOT STATE'LERİ
   const [isGeminiOpen, setIsGeminiOpen] = useState(false);
@@ -170,13 +171,21 @@ export default function Home() {
     setUserSession(session);
 
     if (session?.provider_token) {
-      fetchGoogleCalendarEvents(session.provider_token);
+      if (session.provider_refresh_token && session.user.app_metadata.provider === 'azure') {
+        fetchOutlookCalendarEvents(session.provider_token);
+      } else {
+        fetchGoogleCalendarEvents(session.provider_token);
+      }
     }
 
     supabase.auth.onAuthStateChange((_event, session) => {
       setUserSession(session);
       if (session?.provider_token) {
-        fetchGoogleCalendarEvents(session.provider_token);
+        if (session.user.app_metadata.provider === 'azure') {
+          fetchOutlookCalendarEvents(session.provider_token);
+        } else {
+          fetchGoogleCalendarEvents(session.provider_token);
+        }
       }
     });
   };
@@ -221,6 +230,47 @@ export default function Home() {
     }
   };
 
+  // OUTLOOK (MICROSOFT GRAPH API) ENTEGRASYONU
+  const fetchOutlookCalendarEvents = async (providerToken: string) => {
+    setIsSyncing(true);
+    try {
+      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString();
+      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0, 23, 59, 59).toISOString();
+
+      const res = await fetch(
+        `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${timeMin}&endDateTime=${timeMax}`, 
+        {
+          headers: { Authorization: `Bearer ${providerToken}` }
+        }
+      );
+
+      const data = await res.json();
+      if (data.value) {
+        const events = data.value.map((item: any) => {
+          const startDate = new Date(item.start.dateTime + 'Z');
+          return {
+            id: 'outlook-' + item.id,
+            title: '📫 ' + (item.subject || 'Outlook Etkinliği'),
+            content: item.bodyPreview || 'Outlook Takvim Etkinliği',
+            date: startDate,
+            dayNumber: startDate.getDate(),
+            monthNumber: startDate.getMonth(),
+            yearNumber: startDate.getFullYear(),
+            time: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            color: 'bg-blue-100 border-blue-300 text-blue-950',
+            badge_color: 'bg-blue-200 text-blue-900',
+            isOutlookEvent: true
+          };
+        });
+        setOutlookCalendarEvents(events);
+      }
+    } catch (err) {
+      console.error("Outlook Calendar verileri alınırken hata oluştu:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setIsSyncing(true);
     const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
@@ -229,10 +279,7 @@ export default function Home() {
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
+        queryParams: { access_type: 'offline', prompt: 'consent' },
         redirectTo: redirectToUrl,
       },
     });
@@ -243,10 +290,29 @@ export default function Home() {
     }
   };
 
+  const handleOutlookLogin = async () => {
+    setIsSyncing(true);
+    const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        scopes: 'Calendars.Read Calendars.ReadWrite offline_access',
+        redirectTo: redirectToUrl,
+      },
+    });
+
+    if (error) {
+      alert("Microsoft Login Hatası: " + error.message);
+      setIsSyncing(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUserSession(null);
     setGoogleCalendarEvents([]);
+    setOutlookCalendarEvents([]);
   };
 
   // GEMINI AI CHATBOT FONKSİYONU (BACKEND ROUTE İLE GÜVENLİ ÇAĞRI)
@@ -255,7 +321,7 @@ export default function Home() {
     if (!promptToSend.trim() || isGeminiLoading) return;
 
     if (!userSession) {
-      alert("Gemini AI Asistanını kullanabilmek için lütfen Google hesabınızla giriş yapın.");
+      alert("Gemini AI Asistanını kullanabilmek için lütfen giriş yapın.");
       return;
     }
 
@@ -305,7 +371,10 @@ export default function Home() {
       next.setMonth(next.getMonth() - 1);
     }
     setCurrentDate(next);
-    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
+    if (userSession?.provider_token) {
+      if (userSession.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(userSession.provider_token);
+      else fetchGoogleCalendarEvents(userSession.provider_token);
+    }
   };
 
   const handleNextPeriod = () => {
@@ -318,13 +387,19 @@ export default function Home() {
       next.setMonth(next.getMonth() + 1);
     }
     setCurrentDate(next);
-    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
+    if (userSession?.provider_token) {
+      if (userSession.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(userSession.provider_token);
+      else fetchGoogleCalendarEvents(userSession.provider_token);
+    }
   };
 
   const handleToday = () => {
     const today = new Date();
     setCurrentDate(today);
-    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
+    if (userSession?.provider_token) {
+      if (userSession.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(userSession.provider_token);
+      else fetchGoogleCalendarEvents(userSession.provider_token);
+    }
   };
 
   const handleSelectDay = (dayNum: number) => {
@@ -734,7 +809,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <CalendarIcon size={14} /> Takvim
                 </div>
-                {userSession && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Google Takvim Senkronize" />}
+                {userSession && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Takvim Senkronize" />}
               </div>
             </div>
           </nav>
@@ -873,7 +948,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD */
+          /* DASHBOARD (DÜZELTİLMİŞ KUTU / GRID BOYUTLARI) */
           <>
             <header className="flex justify-between items-center mb-6">
               <div>
@@ -888,7 +963,8 @@ export default function Home() {
               </button>
             </header>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* ESNEK / ŞIK NOT KARTLARI DİZİLİMİ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
               {filteredNotes.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu defterde henüz not kartı yok.</p>
               ) : (
@@ -896,7 +972,7 @@ export default function Home() {
                   <div 
                     key={note.id} 
                     onClick={() => handleOpenPage(note)}
-                    className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border shadow-xs cursor-pointer hover:shadow-md transition-all flex flex-col justify-between relative group min-h-[140px] max-h-[320px] overflow-hidden`}
+                    className={`${note.color || 'bg-amber-50'} p-4.5 rounded-2xl border shadow-2xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[160px] max-h-[280px] overflow-hidden group`}
                   >
                     <div>
                       <div className="flex justify-between items-center mb-2">
@@ -904,11 +980,11 @@ export default function Home() {
                           [{DAY_NAMES[note.day_index || 0]}] [{note.time || '09:00'}]
                         </span>
                       </div>
-                      <h3 className="font-bold text-sm mb-1.5 text-gray-900">{note.title}</h3>
-                      <p className="text-xs opacity-90 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                      <h3 className="font-bold text-sm mb-1.5 text-gray-900 group-hover:text-teal-950 transition-colors">{note.title}</h3>
+                      <p className="text-xs opacity-85 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
                     </div>
 
-                    <div className="pt-3 mt-3 border-t border-black/5 flex justify-end items-center text-[10px] opacity-70">
+                    <div className="pt-2 mt-2 border-t border-black/5 flex justify-end items-center text-[10px] opacity-75">
                       <span className="font-semibold text-teal-800 underline">Sayfayı Aç →</span>
                     </div>
                   </div>
@@ -917,7 +993,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* İLERİ DÜZEY TAKVİM */
+          /* İLERİ DÜZEY TAKVİM (GOOGLE + OUTLOOK DESTEKLİ) */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -964,7 +1040,7 @@ export default function Home() {
                 <button 
                   onClick={() => setIsCalendarSettingsOpen(true)}
                   className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs relative"
-                  title="Google Takvim Entegrasyonu"
+                  title="Takvim Entegrasyon Ayarları"
                 >
                   <Settings size={16} />
                   {userSession && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />}
@@ -1009,6 +1085,12 @@ export default function Home() {
                              g.yearNumber === currentDate.getFullYear() &&
                              (g.time === hour || g.time === 'Tüm Gün')
                       );
+                      const matchedOutlookEvents = outlookCalendarEvents.filter(
+                        o => o.dayNumber === currentDate.getDate() && 
+                             o.monthNumber === currentDate.getMonth() && 
+                             o.yearNumber === currentDate.getFullYear() &&
+                             (o.time === hour || o.time === 'Tüm Gün')
+                      );
 
                       return (
                         <div key={hour} className="pt-2 flex gap-4 items-start min-h-[60px]">
@@ -1031,7 +1113,7 @@ export default function Home() {
                             {matchedGoogleEvents.map(gEvent => (
                               <div 
                                 key={gEvent.id} 
-                                className={`${gEvent.color} p-2.5 rounded-xl border border-sky-300 text-xs font-medium cursor-pointer shadow-2xs hover:shadow-xs transition-shadow flex justify-between items-center`}
+                                className={`${gEvent.color} p-2.5 rounded-xl border text-xs font-medium shadow-2xs flex justify-between items-center`}
                               >
                                 <div>
                                   <p className="font-bold text-sky-950">{gEvent.title}</p>
@@ -1041,7 +1123,20 @@ export default function Home() {
                               </div>
                             ))}
 
-                            {matchedNotes.length === 0 && matchedGoogleEvents.length === 0 && (
+                            {matchedOutlookEvents.map(oEvent => (
+                              <div 
+                                key={oEvent.id} 
+                                className={`${oEvent.color} p-2.5 rounded-xl border text-xs font-medium shadow-2xs flex justify-between items-center`}
+                              >
+                                <div>
+                                  <p className="font-bold text-blue-950">{oEvent.title}</p>
+                                  <p className="text-[11px] text-blue-900 opacity-90">{oEvent.content}</p>
+                                </div>
+                                <span className="text-[10px] bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-bold">Outlook</span>
+                              </div>
+                            ))}
+
+                            {matchedNotes.length === 0 && matchedGoogleEvents.length === 0 && matchedOutlookEvents.length === 0 && (
                               <div className="h-full border-b border-dashed border-gray-100 min-h-[24px]" />
                             )}
                           </div>
@@ -1051,7 +1146,7 @@ export default function Home() {
                   </div>
                 </div>
               ) : calendarMode === 'week' ? (
-                /* HAFTALIK DİNAMİK GÖRÜNÜM */
+                /* HAFTALIK GÖRÜNÜM */
                 <div className="flex flex-col min-w-[700px] h-full">
                   <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
                     <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
@@ -1084,6 +1179,12 @@ export default function Home() {
                                  g.yearNumber === wDay.getFullYear() &&
                                  (g.time === hour || g.time === 'Tüm Gün')
                           );
+                          const matchedOutlookEvents = outlookCalendarEvents.filter(
+                            o => o.dayNumber === wDay.getDate() && 
+                                 o.monthNumber === wDay.getMonth() && 
+                                 o.yearNumber === wDay.getFullYear() &&
+                                 (o.time === hour || o.time === 'Tüm Gün')
+                          );
 
                           return (
                             <div key={dayIdx} className="border-r border-gray-100 p-1 relative hover:bg-teal-50/20 transition-colors flex flex-col gap-1">
@@ -1100,9 +1201,18 @@ export default function Home() {
                               {matchedGoogleEvents.map(gEvent => (
                                 <div 
                                   key={gEvent.id} 
-                                  className={`${gEvent.color} p-1 rounded text-[10px] font-semibold border border-sky-300 cursor-pointer shadow-2xs truncate`}
+                                  className={`${gEvent.color} p-1 rounded text-[10px] font-semibold border border-sky-300 shadow-2xs truncate`}
                                 >
                                   {gEvent.title}
+                                </div>
+                              ))}
+
+                              {matchedOutlookEvents.map(oEvent => (
+                                <div 
+                                  key={oEvent.id} 
+                                  className={`${oEvent.color} p-1 rounded text-[10px] font-semibold border border-blue-300 shadow-2xs truncate`}
+                                >
+                                  {oEvent.title}
                                 </div>
                               ))}
                             </div>
@@ -1133,6 +1243,11 @@ export default function Home() {
                       e => e.dayNumber === dayNum && 
                            e.monthNumber === currentMonthVal && 
                            e.yearNumber === currentYearVal
+                    );
+                    const matchedOutlookEvents = outlookCalendarEvents.filter(
+                      o => o.dayNumber === dayNum && 
+                           o.monthNumber === currentMonthVal && 
+                           o.yearNumber === currentYearVal
                     );
 
                     const isToday = 
@@ -1171,6 +1286,16 @@ export default function Home() {
                               className={`${gEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer border border-sky-300 shadow-2xs`}
                             >
                               {gEvent.title}
+                            </div>
+                          ))}
+
+                          {matchedOutlookEvents.slice(0, 2).map(oEvent => (
+                            <div 
+                              key={oEvent.id}
+                              onClick={(e) => { e.stopPropagation(); handleSelectDay(dayNum); }}
+                              className={`${oEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer border border-blue-300 shadow-2xs`}
+                            >
+                              {oEvent.title}
                             </div>
                           ))}
                         </div>
@@ -1243,11 +1368,16 @@ export default function Home() {
               {!userSession ? (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center space-y-2 my-auto">
                   <Lock size={24} className="text-amber-600 mx-auto" />
-                  <p className="font-bold text-gray-800">Google Hesabı Gerekli</p>
-                  <p className="text-[11px] text-gray-600">Gemini AI Asistanını kullanabilmek için lütfen Google hesabınızla oturum açın.</p>
-                  <button onClick={handleGoogleLogin} className="w-full bg-teal-900 text-white py-2 rounded-lg font-semibold text-xs shadow-sm">
-                    🌐 Google ile Giriş Yap
-                  </button>
+                  <p className="font-bold text-gray-800">Hesap Girişi Gerekli</p>
+                  <p className="text-[11px] text-gray-600">Gemini AI Asistanını kullanabilmek için lütfen Google veya Microsoft hesabınızla oturum açın.</p>
+                  <div className="space-y-1.5 pt-1">
+                    <button onClick={handleGoogleLogin} className="w-full bg-teal-900 text-white py-2 rounded-lg font-semibold text-xs shadow-sm">
+                      🌐 Google ile Giriş Yap
+                    </button>
+                    <button onClick={handleOutlookLogin} className="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded-lg font-semibold text-xs shadow-sm">
+                      📫 Microsoft ile Giriş Yap
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1338,50 +1468,61 @@ export default function Home() {
         </button>
       </div>
 
-      {/* GOOGLE OAUTH MODALI */}
+      {/* TAKVİM ENTEGRASYON MODALI (GOOGLE & OUTLOOK) */}
       {isCalendarSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">
             <div className="flex justify-between items-center border-b pb-3">
               <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
-                <Settings size={18} className="text-teal-900" /> Google Takvim Entegrasyonu
+                <Settings size={18} className="text-teal-900" /> Takvim Entegrasyonları
               </h3>
               <button onClick={() => setIsCalendarSettingsOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button>
             </div>
 
-            <div className="p-4 border rounded-xl bg-gray-50/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="space-y-3">
+              {/* GOOGLE ENTEGRASYONU */}
+              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
                   <span className="text-xl">🌐</span>
                   <div>
-                    <p className="font-bold text-xs text-gray-900">Google Hesabı</p>
-                    <p className="text-[11px] text-gray-500">Google Calendar ile Canlı Senkronizasyon</p>
+                    <p className="font-bold text-xs text-gray-900">Google Calendar</p>
+                    <p className="text-[10px] text-gray-500">Google Etkinlik Senkronizasyonu</p>
                   </div>
                 </div>
-                {userSession ? (
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={10} /> Senkronize Edildi
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <ShieldAlert size={10} /> Pasif
-                  </span>
-                )}
+                <button 
+                  onClick={handleGoogleLogin} 
+                  disabled={isSyncing}
+                  className="text-xs bg-white hover:bg-gray-100 border text-gray-800 font-semibold px-3 py-1.5 rounded-lg shadow-2xs transition-all"
+                >
+                  Bağlan
+                </button>
               </div>
 
-              {userSession ? (
-                <div className="pt-2 space-y-2">
-                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                    Bağlı Hesap: <b>{userSession.user.email}</b>
-                  </p>
-                  <button onClick={handleLogout} className="w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors">
-                    Oturumu Kapat / Bağlantıyı Kes
-                  </button>
+              {/* OUTLOOK / MICROSOFT ENTEGRASYONU */}
+              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">📫</span>
+                  <div>
+                    <p className="font-bold text-xs text-gray-900">Outlook Takvim</p>
+                    <p className="text-[10px] text-gray-500">Microsoft Graph API Senkronizasyonu</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="pt-2 space-y-2">
-                  <button onClick={handleGoogleLogin} disabled={isSyncing} className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2.5 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2">
-                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Giriş Yap & Senkronize Et</span>}
+                <button 
+                  onClick={handleOutlookLogin} 
+                  disabled={isSyncing}
+                  className="text-xs bg-blue-700 hover:bg-blue-800 text-white font-semibold px-3 py-1.5 rounded-lg shadow-2xs transition-all"
+                >
+                  Bağlan
+                </button>
+              </div>
+
+              {userSession && (
+                <div className="pt-2">
+                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                    Oturum Açık: <b>{userSession.user.email}</b>
+                  </p>
+                  <button onClick={handleLogout} className="w-full mt-2 text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors">
+                    Oturumu Kapat / Bağlantıları Kes
                   </button>
                 </div>
               )}

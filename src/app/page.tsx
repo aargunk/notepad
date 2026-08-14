@@ -1,11 +1,3 @@
-// Eğer kullanıcı yoksa doğrudan login ekranına git (Dashboard'u render etme)
-if (!userSession) {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#042f2e] via-[#0d9488] to-[#0f172a] p-4 font-sans">
-      {/* Giriş Ekranı Kodu Burada */}
-    </div>
-  );
-}
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -14,7 +6,7 @@ import {
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
   ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
   File, Paperclip, ExternalLink, Upload, Loader2, Mail, KeyRound, LogIn, UserPlus,
-  ShieldCheck, Users, Clock
+  ShieldCheck, Users, Clock, RefreshCw
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -59,9 +51,8 @@ function Logo({ size = 32, showText = true }: { size?: number; showText?: boolea
 }
 
 export default function Home() {
-  // --- AUTH VE YETKİ (ROLE) STATE'LERİ ---
   const [userSession, setUserSession] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<any>(null); // Rol ve onay durumunu tutar
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -70,10 +61,7 @@ export default function Home() {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Admin Paneli
   const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
-
-  // --- UYGULAMA STATE'LERİ ---
   const [notebooks, setNotebooks] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
@@ -87,7 +75,6 @@ export default function Home() {
   const [calendarMode, setCalendarMode] = useState<'day' | 'week' | 'month'>('month');
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
-  // Düzenleme / Çizim
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [pageTitle, setPageTitle] = useState('');
   const [pageContent, setPageContent] = useState('');
@@ -98,10 +85,6 @@ export default function Home() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
   const draggedNotebookIndex = useRef<number | null>(null);
-
-  const [isListening, setIsListening] = useState(false);
-  const [listeningTarget, setListeningTarget] = useState<'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent' | null>(null);
-  const recognitionRef = useRef<any>(null);
 
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
@@ -146,7 +129,6 @@ export default function Home() {
     { name: 'Mavi', card: 'bg-[#ebf5fb] border-[#aed6f1] text-sky-950', badge: 'bg-sky-200 text-sky-900' },
   ];
 
-  // --- OTURUM & PROFİL YÖNETİMİ ---
   useEffect(() => {
     checkUserSession();
   }, []);
@@ -158,10 +140,6 @@ export default function Home() {
     
     if (session) {
       await fetchUserProfile(session.user.id);
-      if (session.provider_token) {
-        if (session.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(session.provider_token);
-        else fetchGoogleCalendarEvents(session.provider_token);
-      }
     }
     setIsAuthLoading(false);
 
@@ -172,19 +150,15 @@ export default function Home() {
       } else {
         setUserProfile(null);
         setNotebooks([]); setPages([]); setNotes([]); setTasks([]);
-        setGoogleCalendarEvents([]); setOutlookCalendarEvents([]);
       }
     });
   };
 
   const fetchUserProfile = async (userId: string) => {
-    // 1 saniye bekle (Trigger'ın profil oluşturması için zaman tanı)
     await new Promise(res => setTimeout(res, 500));
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    
     if (data) {
       setUserProfile(data);
-      // Eğer admin veya onaylı kullanıcı ise verileri çek
       if (data.is_approved || data.role === 'admin') {
         fetchData();
         if (data.role === 'admin') fetchAdminUsersList();
@@ -199,7 +173,7 @@ export default function Home() {
 
   const toggleUserApproval = async (userId: string, currentStatus: boolean) => {
     await supabase.from('profiles').update({ is_approved: !currentStatus }).eq('id', userId);
-    fetchAdminUsersList(); // Listeyi yenile
+    fetchAdminUsersList();
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -222,17 +196,7 @@ export default function Home() {
     const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { scopes: 'https://www.googleapis.com/auth/calendar.readonly', queryParams: { access_type: 'offline', prompt: 'consent' }, redirectTo: redirectToUrl },
-    });
-    if (error) { setAuthError("Hata: " + error.message); setAuthLoading(false); }
-  };
-
-  const handleOutlookLogin = async () => {
-    setAuthError(''); setAuthLoading(true);
-    const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'azure',
-      options: { scopes: 'Calendars.Read Calendars.ReadWrite offline_access', redirectTo: redirectToUrl },
+      options: { queryParams: { access_type: 'offline', prompt: 'consent' }, redirectTo: redirectToUrl },
     });
     if (error) { setAuthError("Hata: " + error.message); setAuthLoading(false); }
   };
@@ -241,7 +205,6 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  // --- VERİ ÇEKME VE STANDART FONKSİYONLAR ---
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) {
@@ -256,14 +219,6 @@ export default function Home() {
     if (tks) setTasks(tks);
     const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
     if (nts) setNotes(nts);
-  };
-
-  const fetchGoogleCalendarEvents = async (providerToken: string) => {
-    // Kısaltılmış takvim fetch
-  };
-
-  const fetchOutlookCalendarEvents = async (providerToken: string) => {
-    // Kısaltılmış takvim fetch
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, target: 'modal' | 'inline') => {
@@ -326,10 +281,6 @@ export default function Home() {
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
 
-  const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
-    // Ses dinleme kısmı aynı
-  };
-
   const handleOpenPage = (note: any) => {
     setOpenedNotePage(note); setPageTitle(note.title); setPageContent(note.content);
     setPageFileUrl(note.file_url || ''); setPageFileType(note.file_type || 'pdf');
@@ -347,9 +298,6 @@ export default function Home() {
     setIsInlineEditing(false); setIsDrawingMode(false);
   };
 
-  const startDrawing = (e: any) => { if (isDrawingMode) isDrawing.current = true; };
-  const draw = (e: any) => { /* Çizim kodu aynı */ };
-  const stopDrawing = () => { isDrawing.current = false; };
   const clearCanvas = () => { if (canvasRef.current) canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
 
   const addNotebook = async (e: React.FormEvent) => {
@@ -429,7 +377,6 @@ export default function Home() {
   const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsModalOpen(false); };
   const getEmbedViewerUrl = (url: string, type: string) => { if (!url) return ''; if (type === 'pdf') return url; return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`; };
 
-  // --- GÜVENLİK/GİRİŞ & ONAY BEKLEME EKRANLARI ---
   if (isAuthLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-[#042f2e]">
@@ -467,7 +414,6 @@ export default function Home() {
     );
   }
 
-  // ONAY BEKLEME EKRANI (Eğer profil onaylı değilse ve admin değilse)
   if (userProfile && !userProfile.is_approved && userProfile.role !== 'admin') {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-gray-50 p-4">
@@ -483,7 +429,6 @@ export default function Home() {
     );
   }
 
-  // --- ANA UYGULAMA ARAYÜZÜ ---
   const notebookPages = pages.filter(p => p.notebook_name === activeNotebook);
   const filteredNotes = notes.filter(n => {
     if (n.notebook_name !== activeNotebook) return false;
@@ -494,7 +439,6 @@ export default function Home() {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
-      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-64 md:w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-xl md:shadow-md z-30 transition-transform duration-300 select-none ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
           <div className="flex items-center justify-between mb-6 px-1">
@@ -521,7 +465,6 @@ export default function Home() {
                       {notebooks.length > 1 && <button onClick={(e) => deleteNotebook(nb.name, e)} className="text-teal-200 hover:text-red-300 p-0.5"><Trash2 size={12} /></button>}
                     </div>
                   </div>
-                  {/* ALT SAYFALAR */}
                   {activeNotebook === nb.name && notebookPages.length > 0 && (
                     <div className="pl-6 space-y-1 my-1 border-l border-teal-700/50 ml-3">
                       {notebookPages.map(pg => (
@@ -543,7 +486,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* ADMİN PANELİ BUTONU (Sadece role='admin' olan görür) */}
             {userProfile?.role === 'admin' && (
               <div className="space-y-2 pt-3 border-t border-teal-800">
                 <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1 text-rose-300">Yönetim</p>
@@ -571,10 +513,8 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* 2. ORTA ALAN */}
       <main className="flex-1 p-3 md:p-6 bg-white overflow-y-auto flex flex-col relative w-full">
         {activeView === 'admin' && userProfile?.role === 'admin' ? (
-          /* YÖNETİM PANELİ EKRANI */
           <div className="flex-1 max-w-4xl mx-auto w-full animate-fadeIn mt-2">
             <header className="mb-6 flex justify-between items-end border-b pb-4">
               <div>
@@ -629,9 +569,7 @@ export default function Home() {
             </div>
           </div>
         ) : openedNotePage ? (
-          /* NOT DETAY / DÜZENLEME EKRANI */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
-            {/* Burası önceki Not Düzenleme Ekranı kodlarının tamamen aynısı... (Görsel Dağınıklık olmaması için kısa tutuldu) */}
             <div className="flex justify-between mb-4"><button onClick={() => setOpenedNotePage(null)} className="flex items-center gap-1.5 text-xs font-semibold bg-teal-50 px-3 py-1.5 rounded-lg"><ArrowLeft size={16} /> Geri Dön</button></div>
             <div className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-4 md:p-8 shadow-inner relative overflow-y-auto">
                <h1 className="text-3xl font-bold font-serif mb-4">{openedNotePage.title}</h1>
@@ -647,7 +585,6 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD NOT KARTLARI (Öncekiyle Aynı) */
           <>
             <header className="flex justify-between items-center mb-4 flex-wrap gap-2">
               <div><h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Book size={20} className="text-teal-900" /> {activeNotebook} Defteri</h2></div>
@@ -674,12 +611,10 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* TAKVİM (Öncekiyle Aynı) */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border shadow-xs p-4"><h2 className="text-xl font-bold">Takvim Görünümü</h2><p className="text-sm mt-2">Takvim buraya gelecek...</p></div>
         )}
       </main>
       
-      {/* 3. SAĞ PANEL (GÖREVLER - Öncekiyle Aynı) */}
       <aside className="hidden md:flex flex-col w-72 bg-gray-50 border-l p-5 z-30">
         <h3 className="font-bold text-xs flex items-center gap-1.5 mb-3"><CheckSquare size={16} className="text-teal-900"/> Görevlerim</h3>
         <form onSubmit={addTask} className="flex gap-1.5 mb-3"><input type="text" placeholder="Yeni görev..." value={newTaskTitle} onChange={(e)=>setNewTaskTitle(e.target.value)} className="flex-1 text-xs border rounded-lg px-2 py-1.5" /><button type="submit" className="bg-teal-900 text-white px-2 rounded-lg text-xs">Ekle</button></form>

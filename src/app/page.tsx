@@ -5,7 +5,7 @@ import {
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
   ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
-  File, Paperclip, ExternalLink
+  File, Paperclip, ExternalLink, Upload, Loader2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -15,7 +15,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -134,6 +134,7 @@ export default function Home() {
   const [newContent, setNewContent] = useState('');
   const [newFileUrl, setNewFileUrl] = useState('');
   const [newFileType, setNewFileType] = useState('pdf');
+  const [isUploading, setIsUploading] = useState(false);
   const [newDayIndex, setNewDayIndex] = useState(0);
   const [newTime, setNewTime] = useState('09:00');
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
@@ -311,6 +312,46 @@ export default function Home() {
     setUserSession(null);
     setGoogleCalendarEvents([]);
     setOutlookCalendarEvents([]);
+  };
+
+  // DOSYA YÜKLEME FONKSİYONU (SUPABASE STORAGE)
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, target: 'modal' | 'inline') => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      let detectedType = 'pdf';
+      if (['doc', 'docx'].includes(fileExt || '')) detectedType = 'doc';
+      if (['xls', 'xlsx'].includes(fileExt || '')) detectedType = 'xls';
+
+      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const { data, error } = await supabase.storage
+        .from('note-files')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+      if (error) {
+        alert("Dosya yüklenirken hata oluştu: " + error.message);
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('note-files').getPublicUrl(fileName);
+      const publicUrl = publicUrlData.publicUrl;
+
+      if (target === 'modal') {
+        setNewFileUrl(publicUrl);
+        setNewFileType(detectedType);
+      } else {
+        setPageFileUrl(publicUrl);
+        setPageFileType(detectedType);
+      }
+    } catch (err: any) {
+      console.error("Yükleme hatası:", err);
+      alert("Dosya yüklenemedi.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSendGemini = async (overridePrompt?: string) => {
@@ -683,15 +724,12 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
-  // DOKÜMAN ÖNİZLEME İFRAME URL'Sİ ÜRETİCİ
   const getEmbedViewerUrl = (url: string, type: string) => {
     if (!url) return '';
     if (type === 'pdf') return url;
-    // Word (DOC/DOCX) ve Excel (XLS/XLSX) için Microsoft Office Web Viewer
     return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
   };
 
-  // DEFTER VE SAYFA FİLTRELEME
   const notebookPages = pages.filter(p => p.notebook_name === activeNotebook);
   const filteredNotes = notes.filter(n => {
     if (n.notebook_name !== activeNotebook) return false;
@@ -884,7 +922,7 @@ export default function Home() {
                 ) : (
                   <>
                     <button onClick={() => setIsInlineEditing(true)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium">
-                      <Edit size={14}/> Düzenle / Çiz / Dosya Ekle
+                      <Edit size={14}/> Düzenle / Çiz / Dosya Yükle
                     </button>
                     <button onClick={() => deleteNote(openedNotePage.id)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium">
                       <Trash2 size={14}/> Sil
@@ -894,28 +932,31 @@ export default function Home() {
               </div>
             </div>
 
-            {/* DÜZENLEME MODUNDA DOSYA URL DÜZENLEME ALANI */}
+            {/* DÜZENLEME MODUNDA DOSYA YÜKLEME ALANI */}
             {isInlineEditing && (
               <div className="mb-4 p-3.5 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2 text-xs">
                 <p className="font-bold text-teal-900 flex items-center gap-1.5">
-                  <Paperclip size={14} /> Ekli Doküman (PDF, Word, Excel Bağlantısı)
+                  <Paperclip size={14} /> Ekli Doküman (PDF, Word, Excel)
                 </p>
-                <div className="flex gap-2">
-                  <select 
-                    value={pageFileType} 
-                    onChange={(e) => setPageFileType(e.target.value)}
-                    className="border rounded-lg px-2 py-1.5 bg-white text-xs font-semibold"
-                  >
-                    <option value="pdf">PDF Dokümanı</option>
-                    <option value="doc">Word (.doc/docx)</option>
-                    <option value="xls">Excel (.xls/xlsx)</option>
-                  </select>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <label className="cursor-pointer bg-teal-900 hover:bg-teal-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium shadow-2xs">
+                    {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                    {isUploading ? 'Yükleniyor...' : 'Cihazdan Dosya Seç / Yükle'}
+                    <input 
+                      type="file" 
+                      accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                      onChange={(e) => handleFileUpload(e, 'inline')} 
+                      className="hidden" 
+                      disabled={isUploading}
+                    />
+                  </label>
+                  <span className="text-gray-400 font-semibold">veya URL:</span>
                   <input 
                     type="url" 
                     value={pageFileUrl} 
                     onChange={(e) => setPageFileUrl(e.target.value)}
-                    placeholder="https://örnek.com/dosya.pdf veya drive linki..."
-                    className="flex-1 border rounded-lg px-3 py-1.5 bg-white outline-none"
+                    placeholder="https://..."
+                    className="flex-1 border rounded-lg px-3 py-1.5 bg-white outline-none min-w-[200px]"
                   />
                 </div>
               </div>
@@ -989,7 +1030,7 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* YÖNTEM 3: DOKÜMAN (PDF, WORD, EXCEL) CANLI ÖNİZLEME PENCERESİ */}
+                {/* DOKÜMAN (PDF, WORD, EXCEL) CANLI ÖNİZLEME PENCERESİ */}
                 {openedNotePage.file_url && !isInlineEditing && (
                   <div className="mt-6 border border-teal-200 rounded-2xl overflow-hidden bg-white shadow-md">
                     <div className="bg-teal-900 text-white px-4 py-2.5 flex items-center justify-between text-xs font-semibold">
@@ -1003,10 +1044,10 @@ export default function Home() {
                         rel="noreferrer"
                         className="flex items-center gap-1 text-teal-200 hover:text-white bg-white/10 px-2.5 py-1 rounded-lg transition-colors"
                       >
-                        Ayrı Sekmede Aç <ExternalLink size={12} />
+                        Ayrı Sekmede Aç / İndir <ExternalLink size={12} />
                       </a>
                     </div>
-                    <div className="w-full h-[500px] bg-gray-100">
+                    <div className="w-full h-[520px] bg-gray-100">
                       <iframe 
                         src={getEmbedViewerUrl(openedNotePage.file_url, openedNotePage.file_type || 'pdf')} 
                         className="w-full h-full border-none"
@@ -1019,7 +1060,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD (DÜZELTİLMİŞ TAM NOT KARTLARI DİZİLİMİ & KUTU BOYUTLARI) */
+          /* DASHBOARD (DÜZELTİLMİŞ NOT KARTLARI DİZİLİMİ) */
           <>
             <header className="flex justify-between items-center mb-4 flex-wrap gap-2">
               <div>
@@ -1072,7 +1113,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* TAMAMLAYICI DÜZELTİLMİŞ NOT KARTLARI (TAŞMAYAN & EŞİT DÜZENLİ) */}
+            {/* NOT KARTLARI */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
               {filteredNotes.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu bölümde henüz not kartı bulunmuyor.</p>
@@ -1090,7 +1131,7 @@ export default function Home() {
                         </span>
                         {note.file_url && (
                           <span className="text-[10px] bg-teal-800 text-white px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
-                            <Paperclip size={10} /> {note.file_type ? note.file_type.toUpperCase() : 'PDF'}
+                            <Paperclip size={10} /> {note.file_type ? note.file_type.toUpperCase() : 'DOSYA'}
                           </span>
                         )}
                       </div>
@@ -1116,7 +1157,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* İLERİ DÜZEY TAKVİM */
+          /* TAKVİM */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -1157,7 +1198,6 @@ export default function Home() {
 
             <div className="flex-1 overflow-auto">
               {calendarMode === 'day' ? (
-                /* GÜNLÜK ÖZEL GÖRÜNÜM */
                 <div className="flex flex-col h-full bg-white p-4 max-w-3xl mx-auto">
                   <div className="flex justify-between items-center pb-3 border-b mb-4">
                     <div>
@@ -1207,7 +1247,6 @@ export default function Home() {
                   </div>
                 </div>
               ) : calendarMode === 'week' ? (
-                /* HAFTALIK GÖRÜNÜM */
                 <div className="flex flex-col min-w-[700px] h-full">
                   <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
                     <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
@@ -1244,7 +1283,6 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* AYLIK GÖRÜNÜM */
                 <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
                   {DAY_NAMES.map(d => <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">{d}</div>)}
                   {Array.from({ length: firstDayOfMonthIndex }).map((_, i) => <div key={'empty-' + i} className="min-h-[85px] bg-gray-50/30 p-1" />)}
@@ -1467,7 +1505,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT MODALI (DOSYA EKLENTİ ALANI İLE GÜNCELLENMİŞ) */}
+      {/* YENİ NOT MODALI (CİHAZDAN DOSYA YÜKLEME BUTONLU) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
@@ -1495,26 +1533,27 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* DOSYA EKLEME ALANI */}
+              {/* CİHAZDAN DOSYA YÜKLEME ALANI */}
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Doküman URL'si (PDF / Word / Excel)</label>
-                <div className="flex gap-2">
-                  <select 
-                    value={newFileType} 
-                    onChange={(e) => setNewFileType(e.target.value)} 
-                    className="border rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"
-                  >
-                    <option value="pdf">PDF</option>
-                    <option value="doc">Word</option>
-                    <option value="xls">Excel</option>
-                  </select>
-                  <input 
-                    type="url" 
-                    value={newFileUrl} 
-                    onChange={(e) => setNewFileUrl(e.target.value)} 
-                    placeholder="https://... (Örn: Google Drive public PDF linki)" 
-                    className="flex-1 border rounded-lg px-3 py-1.5 text-xs outline-none" 
-                  />
+                <label className="text-xs text-gray-500 block mb-1">Doküman Ekle (PDF / Word / Excel)</label>
+                <div className="space-y-1.5">
+                  <label className="cursor-pointer bg-teal-900 hover:bg-teal-800 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-2xs">
+                    {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    {isUploading ? 'Dosya Yükleniyor...' : '📂 Bilgisayardan Dosya Seç'}
+                    <input 
+                      type="file" 
+                      accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                      onChange={(e) => handleFileUpload(e, 'modal')} 
+                      className="hidden" 
+                      disabled={isUploading}
+                    />
+                  </label>
+
+                  {newFileUrl && (
+                    <p className="text-[10px] text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200 truncate">
+                      ✓ Yüklendi: {newFileUrl}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1544,7 +1583,9 @@ export default function Home() {
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={resetForm} className="px-3 py-1.5 border rounded-lg text-xs text-gray-600">İptal</button>
-                <button type="submit" className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs">{isEditMode ? 'Güncelle' : 'Oluştur'}</button>
+                <button type="submit" disabled={isUploading} className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs disabled:opacity-50">
+                  {isEditMode ? 'Güncelle' : 'Oluştur'}
+                </button>
               </div>
             </form>
           </div>

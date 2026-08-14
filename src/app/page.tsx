@@ -938,7 +938,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeView === 'notes' ? (
-          /* DASHBOARD (DÜZELTİLMİŞ NOT KUTU BOYUTLARI VE SAYFA SEKMELERİ) */
+          /* DASHBOARD (DÜZELTİLMİŞ TAM NOT KARTLARI DİZİLİMİ & KUTU BOYUTLARI) */
           <>
             <header className="flex justify-between items-center mb-4 flex-wrap gap-2">
               <div>
@@ -991,8 +991,8 @@ export default function Home() {
               </div>
             )}
 
-            {/* ŞIK NOT KARTLARI DİZİLİMİ (EŞİT KUTU DÜZENLEMESİ) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+            {/* TAMAMLAYICI DÜZELTİLMİŞ NOT KARTLARI (TAŞMAYAN & EŞİT DÜZENLİ) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
               {filteredNotes.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu bölümde henüz not kartı bulunmuyor.</p>
               ) : (
@@ -1000,20 +1000,29 @@ export default function Home() {
                   <div 
                     key={note.id} 
                     onClick={() => handleOpenPage(note)}
-                    className={`${note.color || 'bg-amber-50'} p-4.5 rounded-2xl border shadow-2xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between h-[180px] overflow-hidden group`}
+                    className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}
                   >
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2 py-0.5 rounded font-bold`}>
+                    <div className="space-y-2 mb-3">
+                      <div className="flex justify-between items-center">
+                        <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>
                           [{DAY_NAMES[note.day_index || 0]}] [{note.time || '09:00'}]
                         </span>
                       </div>
-                      <h3 className="font-bold text-sm mb-1.5 text-gray-900 group-hover:text-teal-950 transition-colors truncate">{note.title}</h3>
-                      <p className="text-xs opacity-85 leading-relaxed whitespace-pre-wrap line-clamp-3">{note.content}</p>
+                      
+                      <h3 className="font-bold text-sm text-gray-900 group-hover:text-teal-950 transition-colors leading-snug">
+                        {note.title}
+                      </h3>
+                      
+                      <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">
+                        {note.content}
+                      </p>
                     </div>
 
-                    <div className="pt-2 border-t border-black/5 flex justify-end items-center text-[10px] opacity-75">
-                      <span className="font-semibold text-teal-800 underline">Sayfayı Aç →</span>
+                    <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
+                      <span className="text-gray-500 font-medium text-[10px]">Detaylı Not</span>
+                      <span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">
+                        Sayfayı Aç →
+                      </span>
                     </div>
                   </div>
                 ))

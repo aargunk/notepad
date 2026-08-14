@@ -14,7 +14,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -1226,7 +1226,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h4 className="font-bold text-xs flex items-center gap-1">
-                    Gemini AI Asistan <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-mono">2.0 Flash</span>
+                    Gemini AI Asistan <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-mono">3.7 Flash</span>
                   </h4>
                   <p className="text-[10px] text-teal-200">
                     {openedNotePage ? `Bağlam: "${openedNotePage.title}"` : 'Genel Asistan Modu'}

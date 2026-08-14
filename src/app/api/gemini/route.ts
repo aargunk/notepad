@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
@@ -9,51 +10,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Gemini API Key eksik!' }, { status: 500 });
     }
 
-    // Doğrudan v1beta endpoint'i üzerinden en güncel ve kararlı model ismi
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Google Resmî AI SDK Başlatma
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
+    // Varsayılan kararlı model çağrısı
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
-        ]
-      })
-    });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error('Gemini API Hatası:', data);
-      
-      // Eğer model ismi hatası verirse fallback olarak varsayılan modeli dene
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-      const fallbackRes = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const fallbackData = await fallbackRes.json();
-
-      if (!fallbackRes.ok) {
-        return NextResponse.json(
-          { error: data.error?.message || 'Gemini yanıt vermedi.' },
-          { status: res.status }
-        );
-      }
-
-      const fallbackText = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || 'Yanıt üretilemedi.';
-      return NextResponse.json({ text: fallbackText });
-    }
-
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Yanıt üretilemedi.';
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json({ text });
 
   } catch (error: any) {
-    console.error('Server Route Hatası:', error);
-    return NextResponse.json({ error: 'Sunucu hatası oluştu.' }, { status: 500 });
+    console.error('Gemini SDK Hatası:', error);
+
+    // Eğer model ismi hatası alırsak 'gemini-pro' modeline otomatik geçiş
+    try {
+      const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      
+      const { prompt } = await req.clone().json();
+      const result = await fallbackModel.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      return NextResponse.json({ text });
+    } catch (fallbackError: any) {
+      return NextResponse.json(
+        { error: error?.message || 'Gemini yanıt veremedi.' },
+        { status: 500 }
+      );
+    }
   }
 }

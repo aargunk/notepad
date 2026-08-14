@@ -2,11 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Book, Plus, CheckSquare, Calendar as CalendarIcon, 
-  Trash2, Edit, ArrowLeft, Settings, CheckCircle2, 
+  Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
   ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
-  File, Paperclip, ExternalLink, Upload, Loader2, Mail, KeyRound, LogIn, UserPlus,
-  ShieldCheck, Users, Clock, RefreshCw
+  File, Paperclip, ExternalLink, Upload, Loader2, Mail, KeyRound, LogIn, UserPlus
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,23 +19,55 @@ const MONTH_NAMES = [
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
+// CHROME İÇİN DÜZELTİLMİŞ LOGO (Unique ID kullanıldı)
 function Logo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 select-none cursor-pointer group">
-      <div style={{ width: size, height: size }} className="relative flex items-center justify-center rounded-xl bg-gradient-to-br from-gray-950 via-teal-950 to-black p-1.5 shadow-lg shadow-teal-950/40 border border-teal-500/30 group-hover:border-teal-400/60 transition-all duration-300 shrink-0">
-        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full transform group-hover:scale-105 transition-transform duration-300">
+      <div 
+        style={{ width: size, height: size }} 
+        className="relative flex items-center justify-center rounded-xl bg-gradient-to-br from-gray-950 via-teal-950 to-black p-1.5 shadow-lg shadow-teal-950/40 border border-teal-500/30 group-hover:border-teal-400/60 group-hover:shadow-teal-500/20 transition-all duration-300 shrink-0"
+      >
+        <svg 
+          viewBox="0 0 100 100" 
+          fill="none" 
+          xmlns="http://www.w3.org/2000/svg"
+          className="w-full h-full transform group-hover:scale-105 transition-transform duration-300"
+        >
           <defs>
-            <linearGradient id="npLeftBarGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#0d9488" /><stop offset="100%" stopColor="#042f2e" /></linearGradient>
-            <linearGradient id="npDiagBarGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#ff2a5f" /><stop offset="50%" stopColor="#e11d48" /><stop offset="100%" stopColor="#9f1239" /></linearGradient>
-            <linearGradient id="npRightBarGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#14b8a6" /><stop offset="100%" stopColor="#0f766e" /></linearGradient>
-            <filter id="npShadowFilter" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="-2" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.7" /></filter>
+            <linearGradient id="npLeftBarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#0d9488" />
+              <stop offset="100%" stopColor="#042f2e" />
+            </linearGradient>
+            <linearGradient id="npDiagBarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#ff2a5f" />
+              <stop offset="50%" stopColor="#e11d48" />
+              <stop offset="100%" stopColor="#9f1239" />
+            </linearGradient>
+            <linearGradient id="npRightBarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#14b8a6" />
+              <stop offset="100%" stopColor="#0f766e" />
+            </linearGradient>
+            <filter id="npShadowFilter" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="-2" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.7" />
+            </filter>
           </defs>
           <rect x="18" y="15" width="20" height="70" rx="4" fill="url(#npLeftBarGrad)" />
           <rect x="62" y="15" width="20" height="70" rx="4" fill="url(#npRightBarGrad)" />
-          <path d="M18 19 C18 16.5 20.5 15 22.5 16.5 L79.5 81 C81.5 82.5 82 85 82 85 L62 85 L18 32 Z" fill="url(#npDiagBarGrad)" filter="url(#npShadowFilter)"/>
-          <path d="M24 20 L76 78" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.35" />
+          <path 
+            d="M18 19 C18 16.5 20.5 15 22.5 16.5 L79.5 81 C81.5 82.5 82 85 82 85 L62 85 L18 32 Z" 
+            fill="url(#npDiagBarGrad)" 
+            filter="url(#npShadowFilter)"
+          />
+          <path 
+            d="M24 20 L76 78" 
+            stroke="#ffffff" 
+            strokeWidth="1.5" 
+            strokeLinecap="round" 
+            strokeOpacity="0.35" 
+          />
         </svg>
       </div>
+
       {showText && (
         <div className="flex flex-col">
           <div className="flex items-center gap-1">
@@ -51,41 +82,51 @@ function Logo({ size = 32, showText = true }: { size?: number; showText?: boolea
 }
 
 export default function Home() {
+  // --- AUTH (GİRİŞ) STATE'LERİ ---
   const [userSession, setUserSession] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   
+  // Login / Register Form State'leri
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
-  const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
+  // --- UYGULAMA STATE'LERİ ---
   const [notebooks, setNotebooks] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activePageId, setActivePageId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'notes' | 'calendar' | 'admin'>('notes');
+  const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileTasksOpen, setIsMobileTasksOpen] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'day' | 'week' | 'month'>('month');
+
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
+  // Düzenleme / Çizim
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [pageTitle, setPageTitle] = useState('');
   const [pageContent, setPageContent] = useState('');
   const [pageFileUrl, setPageFileUrl] = useState('');
   const [pageFileType, setPageFileType] = useState('pdf');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
   const draggedNotebookIndex = useRef<number | null>(null);
 
+  // Sesle Yazma
+  const [isListening, setIsListening] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent' | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Modallar
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
   const [isPageModalOpen, setIsPageModalOpen] = useState(false);
@@ -98,6 +139,7 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newFileUrl, setNewFileUrl] = useState('');
@@ -108,14 +150,16 @@ export default function Home() {
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
 
+  // Takvim Entegrasyonları
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<any[]>([]);
 
+  // Gemini AI
   const [isGeminiOpen, setIsGeminiOpen] = useState(false);
   const [geminiMessages, setGeminiMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([
-    { role: 'model', text: 'Merhaba! Ben Gemini AI Asistanınız. Açık olan notunuz hakkında sorular sorabilirsiniz.' }
+    { role: 'model', text: 'Merhaba! Ben Gemini AI Asistanınız. Açık olan notunuz veya ekli dosyanız hakkında sorular sorabilir, özet isteyebilirsiniz.' }
   ]);
   const [geminiInput, setGeminiInput] = useState('');
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
@@ -129,6 +173,7 @@ export default function Home() {
     { name: 'Mavi', card: 'bg-[#ebf5fb] border-[#aed6f1] text-sky-950', badge: 'bg-sky-200 text-sky-900' },
   ];
 
+  // --- 1. OTURUM YÖNETİMİ BAŞLANGICI ---
   useEffect(() => {
     checkUserSession();
   }, []);
@@ -139,121 +184,221 @@ export default function Home() {
     setUserSession(session);
     
     if (session) {
-      await fetchUserProfile(session.user.id);
+      await fetchData(); // Giriş yapılmışsa verileri çek
+      if (session.provider_token) {
+        if (session.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(session.provider_token);
+        else fetchGoogleCalendarEvents(session.provider_token);
+      }
     }
     setIsAuthLoading(false);
 
     supabase.auth.onAuthStateChange(async (_event, session) => {
       setUserSession(session);
       if (session) {
-        await fetchUserProfile(session.user.id);
+        await fetchData();
+        if (session.provider_token) {
+          if (session.user.app_metadata.provider === 'azure') fetchOutlookCalendarEvents(session.provider_token);
+          else fetchGoogleCalendarEvents(session.provider_token);
+        }
       } else {
-        setUserProfile(null);
-        setNotebooks([]); setPages([]); setNotes([]); setTasks([]);
+        // Çıkış yapıldığında verileri temizle
+        setNotebooks([]);
+        setPages([]);
+        setNotes([]);
+        setTasks([]);
+        setGoogleCalendarEvents([]);
+        setOutlookCalendarEvents([]);
       }
     });
-  };
-
-  const fetchUserProfile = async (userId: string) => {
-    await new Promise(res => setTimeout(res, 500));
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
-      setUserProfile(data);
-      if (data.is_approved || data.role === 'admin') {
-        fetchData();
-        if (data.role === 'admin') fetchAdminUsersList();
-      }
-    }
-  };
-
-  const fetchAdminUsersList = async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (data) setAdminUsersList(data);
-  };
-
-  const toggleUserApproval = async (userId: string, currentStatus: boolean) => {
-    await supabase.from('profiles').update({ is_approved: !currentStatus }).eq('id', userId);
-    fetchAdminUsersList();
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     setAuthLoading(true);
+
     if (isLoginMode) {
       const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       if (error) setAuthError(error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
     } else {
       const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
       if (error) setAuthError(error.message);
-      else alert('Kayıt başarılı! Lütfen yönetici onayını bekleyin.');
+      else alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
     }
     setAuthLoading(false);
   };
 
   const handleGoogleLogin = async () => {
-    setAuthError(''); setAuthLoading(true);
+    setAuthError('');
+    setAuthLoading(true);
     const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { queryParams: { access_type: 'offline', prompt: 'consent' }, redirectTo: redirectToUrl },
+      options: {
+        scopes: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+        redirectTo: redirectToUrl,
+      },
     });
-    if (error) { setAuthError("Hata: " + error.message); setAuthLoading(false); }
+    if (error) { setAuthError("Google Login Hatası: " + error.message); setAuthLoading(false); }
+  };
+
+  const handleOutlookLogin = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    const redirectToUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: { scopes: 'Calendars.Read Calendars.ReadWrite offline_access', redirectTo: redirectToUrl },
+    });
+    if (error) { setAuthError("Microsoft Login Hatası: " + error.message); setAuthLoading(false); }
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+  // --- OTURUM YÖNETİMİ SONU ---
 
+  // VERİ ÇEKME (RLS sayesiyle otomatik olarak sadece oturum açan kişinin verileri gelir)
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) {
-      setNotebooks(nbs); setActiveNotebook(nbs[0].name);
+      setNotebooks(nbs);
+      setActiveNotebook(nbs[0].name);
     } else {
-      const { data: newNb } = await supabase.from('notebooks').insert([{ name: 'Kişisel' }]).select();
-      if (newNb && newNb.length > 0) { setNotebooks(newNb); setActiveNotebook(newNb[0].name); }
+      // İlk defa giren kullanıcıya varsayılan defter oluştur
+      const defaultNbName = 'Kişisel';
+      const { data: newNb } = await supabase.from('notebooks').insert([{ name: defaultNbName }]).select();
+      if (newNb && newNb.length > 0) {
+        setNotebooks(newNb);
+        setActiveNotebook(newNb[0].name);
+      }
     }
+
     const { data: pgs } = await supabase.from('pages').select('*').order('created_at', { ascending: true });
     if (pgs) setPages(pgs);
+
     const { data: tks } = await supabase.from('tasks').select('*').order('created_at', { ascending: true });
     if (tks) setTasks(tks);
+
     const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
     if (nts) setNotes(nts);
   };
 
+
+  const fetchGoogleCalendarEvents = async (providerToken: string) => {
+    setIsSyncing(true);
+    try {
+      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString();
+      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0, 23, 59, 59).toISOString();
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${timeMin}&timeMax=${timeMax}`, { headers: { Authorization: `Bearer ${providerToken}` } });
+      const data = await res.json();
+      if (data.items) {
+        const events = data.items.map((item: any) => {
+          const startDate = item.start?.dateTime ? new Date(item.start.dateTime) : (item.start?.date ? new Date(item.start.date) : new Date());
+          return {
+            id: 'gcal-' + item.id, title: '📅 ' + (item.summary || 'Google Etkinliği'), content: item.description || 'Google Calendar etkinliği.',
+            date: startDate, dayNumber: startDate.getDate(), monthNumber: startDate.getMonth(), yearNumber: startDate.getFullYear(),
+            time: item.start?.dateTime ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Tüm Gün',
+            color: 'bg-sky-100 border-sky-300 text-sky-950', badge_color: 'bg-sky-200 text-sky-900', isGoogleEvent: true
+          };
+        });
+        setGoogleCalendarEvents(events);
+      }
+    } catch (err) { console.error("GCal Error:", err); } finally { setIsSyncing(false); }
+  };
+
+  const fetchOutlookCalendarEvents = async (providerToken: string) => {
+    setIsSyncing(true);
+    try {
+      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString();
+      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0, 23, 59, 59).toISOString();
+      const res = await fetch(`https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${timeMin}&endDateTime=${timeMax}`, { headers: { Authorization: `Bearer ${providerToken}` } });
+      const data = await res.json();
+      if (data.value) {
+        const events = data.value.map((item: any) => {
+          const startDate = new Date(item.start.dateTime + 'Z');
+          return {
+            id: 'outlook-' + item.id, title: '📫 ' + (item.subject || 'Outlook Etkinliği'), content: item.bodyPreview || 'Outlook Takvim Etkinliği',
+            date: startDate, dayNumber: startDate.getDate(), monthNumber: startDate.getMonth(), yearNumber: startDate.getFullYear(),
+            time: startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            color: 'bg-blue-100 border-blue-300 text-blue-950', badge_color: 'bg-blue-200 text-blue-900', isOutlookEvent: true
+          };
+        });
+        setOutlookCalendarEvents(events);
+      }
+    } catch (err) { console.error("Outlook Error:", err); } finally { setIsSyncing(false); }
+  };
+
+  // DOSYA YÜKLEME FONKSİYONU
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, target: 'modal' | 'inline') => {
     const file = event.target.files?.[0];
     if (!file || !userSession) return;
+
     setIsUploading(true);
     try {
       const fileExt = file.name.split('.').pop()?.toLowerCase();
       let detectedType = 'pdf';
       if (['doc', 'docx'].includes(fileExt || '')) detectedType = 'doc';
       if (['xls', 'xlsx'].includes(fileExt || '')) detectedType = 'xls';
+
+      // Dosya adını benzersiz ve temiz yap
       const fileName = `${userSession.user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      const { error } = await supabase.storage.from('note-files').upload(fileName, file, { cacheControl: '3600', upsert: true });
-      if (error) { alert("Dosya yüklenirken hata oluştu."); return; }
+      const { data, error } = await supabase.storage
+        .from('note-files')
+        .upload(fileName, file, { cacheControl: '3600', upsert: true });
+
+      if (error) {
+        alert("Dosya yüklenirken hata oluştu: " + error.message);
+        return;
+      }
+
       const { data: publicUrlData } = supabase.storage.from('note-files').getPublicUrl(fileName);
-      if (target === 'modal') { setNewFileUrl(publicUrlData.publicUrl); setNewFileType(detectedType); }
-      else { setPageFileUrl(publicUrlData.publicUrl); setPageFileType(detectedType); }
-    } catch (err: any) { alert("Dosya yüklenemedi."); } finally { setIsUploading(false); }
+      const publicUrl = publicUrlData.publicUrl;
+
+      if (target === 'modal') {
+        setNewFileUrl(publicUrl);
+        setNewFileType(detectedType);
+      } else {
+        setPageFileUrl(publicUrl);
+        setPageFileType(detectedType);
+      }
+    } catch (err: any) {
+      console.error("Yükleme hatası:", err);
+      alert("Dosya yüklenemedi.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSendGemini = async (overridePrompt?: string) => {
     const promptToSend = overridePrompt || geminiInput;
     if (!promptToSend.trim() || isGeminiLoading) return;
-    setGeminiMessages(prev => [...prev, { role: 'user', text: promptToSend }]);
+
+    const userMessage = { role: 'user' as const, text: promptToSend };
+    setGeminiMessages(prev => [...prev, userMessage]);
     if (!overridePrompt) setGeminiInput('');
     setIsGeminiLoading(true);
+
     try {
-      let contextText = openedNotePage ? `\n\n[ŞU ANDA AÇIK OLAN NOT]\nBaşlık: ${openedNotePage.title}\nİçerik: ${openedNotePage.content}\n\n` : '';
+      let contextText = '';
+      if (openedNotePage) {
+        contextText = `\n\n[ŞU ANDA AÇIK OLAN NOT]\nBaşlık: ${openedNotePage.title}\nİçerik: ${openedNotePage.content}\nDosya URL: ${openedNotePage.file_url || 'Yok'}\n\n`;
+      }
+
+      const fullPrompt = `Sen Notepad Pro uygulamasının akıllı AI asistanısın. Kullanıcıya Türkçe, nazik ve üretken bir şekilde yardımcı ol.${contextText}Kullanıcının sorusu / talebi: ${promptToSend}`;
+
       const res = await fetch('/api/gemini', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: `Sen AI asistanısın.${contextText}Soru: ${promptToSend}` }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
       const data = await res.json();
-      setGeminiMessages(prev => [...prev, { role: 'model', text: data.text || 'Hata' }]);
-    } catch (err) { setGeminiMessages(prev => [...prev, { role: 'model', text: 'Hata oluştu.' }]); } finally { setIsGeminiLoading(false); }
+      if (!res.ok || data.error) setGeminiMessages(prev => [...prev, { role: 'model', text: `Hata: ${data.error || 'Yanıt alınamadı.'}` }]);
+      else setGeminiMessages(prev => [...prev, { role: 'model', text: data.text }]);
+    } catch (err: any) {
+      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Sunucuya bağlanırken bir hata oluştu.' }]);
+    } finally { setIsGeminiLoading(false); }
   };
 
   const handleDragStart = (index: number) => { draggedNotebookIndex.current = index; };
@@ -267,19 +412,48 @@ export default function Home() {
     draggedNotebookIndex.current = null;
   };
 
-  useEffect(() => { if (chatBottomRef.current) chatBottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [geminiMessages]);
+  useEffect(() => {
+    if (chatBottomRef.current) chatBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [geminiMessages]);
+
   useEffect(() => {
     if (isInlineEditing && canvasRef.current && canvasContainerRef.current) {
-      canvasRef.current.width = canvasContainerRef.current.clientWidth;
-      canvasRef.current.height = canvasContainerRef.current.clientHeight;
+      const canvas = canvasRef.current;
+      const container = canvasContainerRef.current;
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
       if (openedNotePage?.image_url) {
-        const ctx = canvasRef.current.getContext('2d');
+        const ctx = canvas.getContext('2d');
         const img = new Image();
-        img.onload = () => { ctx?.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height); };
+        img.onload = () => { ctx?.drawImage(img, 0, 0, canvas.width, canvas.height); };
         img.src = openedNotePage.image_url;
       }
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
+
+  const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("Tarayıcınız ses tanıma özelliğini desteklemiyor."); return; }
+    if (isListening) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false); setListeningTarget(null); return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'tr-TR'; recognition.continuous = true; recognition.interimResults = false;
+    recognition.onstart = () => { setIsListening(true); setListeningTarget(target); };
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript;
+      if (target === 'modalTitle') setNewTitle(prev => (prev ? prev + ' ' + transcript : transcript));
+      else if (target === 'modalContent') setNewContent(prev => (prev ? prev + ' ' + transcript : transcript));
+      else if (target === 'pageTitle') setPageTitle(prev => (prev ? prev + ' ' + transcript : transcript));
+      else if (target === 'pageContent') setPageContent(prev => (prev ? prev + '\n' + transcript : transcript));
+    };
+    recognition.onerror = () => { setIsListening(false); setListeningTarget(null); };
+    recognition.onend = () => { setIsListening(false); setListeningTarget(null); };
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
 
   const handleOpenPage = (note: any) => {
     setOpenedNotePage(note); setPageTitle(note.title); setPageContent(note.content);
@@ -291,20 +465,56 @@ export default function Home() {
     if (!openedNotePage) return;
     let drawingData = openedNotePage.image_url;
     if (canvasRef.current) drawingData = canvasRef.current.toDataURL();
+    const updatedNote = { ...openedNotePage, title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData };
+    
     const { data }: any = await supabase.from('notes').update({ title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData }).eq('id', openedNotePage.id).select();
+    
     if (data && data.length > 0) {
-      setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n)); setOpenedNotePage(data[0]);
+      setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n));
+      setOpenedNotePage(data[0]);
     }
     setIsInlineEditing(false); setIsDrawingMode(false);
   };
 
-  const clearCanvas = () => { if (canvasRef.current) canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    let clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    let clientY = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawingMode) return;
+    isDrawing.current = true;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) { const { x, y } = getCoordinates(e); ctx.beginPath(); ctx.moveTo(x, y); }
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current || !isDrawingMode) return;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx) {
+      const { x, y } = getCoordinates(e);
+      ctx.lineTo(x, y); ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+    }
+  };
+
+  const stopDrawing = () => { isDrawing.current = false; };
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+  };
 
   const addNotebook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNotebookName.trim()) return;
     const { data }: any = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
-    if (data && data.length > 0) { setNotebooks([...notebooks, data[0]]); setActiveNotebook(data[0].name); }
+    if (data && data.length > 0) {
+      setNotebooks([...notebooks, data[0]]);
+      setActiveNotebook(data[0].name);
+    }
     setNewNotebookName(''); setIsNotebookModalOpen(false);
   };
 
@@ -312,15 +522,20 @@ export default function Home() {
     e.preventDefault();
     if (!newPageTitle.trim()) return;
     const { data }: any = await supabase.from('pages').insert([{ notebook_name: activeNotebook, title: newPageTitle.trim() }]).select();
-    if (data && data.length > 0) { setPages([...pages, data[0]]); setActivePageId(data[0].id); }
+    if (data && data.length > 0) {
+      setPages([...pages, data[0]]);
+      setActivePageId(data[0].id);
+    }
     setNewPageTitle(''); setIsPageModalOpen(false);
   };
 
   const deletePage = async (pageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm("Bu sayfayı silmek istediğinize emin misiniz?")) {
-      await supabase.from('pages').delete().eq('id', pageId); await supabase.from('notes').delete().eq('page_id', pageId);
-      setPages(pages.filter(p => p.id !== pageId)); setNotes(notes.filter(n => n.page_id !== pageId));
+    if (confirm("Bu sayfayı ve içindeki notları silmek istediğinize emin misiniz?")) {
+      await supabase.from('pages').delete().eq('id', pageId);
+      await supabase.from('notes').delete().eq('page_id', pageId);
+      setPages(pages.filter(p => p.id !== pageId));
+      setNotes(notes.filter(n => n.page_id !== pageId));
       if (activePageId === pageId) setActivePageId(null);
     }
   };
@@ -328,10 +543,14 @@ export default function Home() {
   const deleteNotebook = async (nbName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (notebooks.length <= 1) { alert('En az bir defter kalmalıdır!'); return; }
-    if (confirm(`Defteri silmek istediğinize emin misiniz?`)) {
-      await supabase.from('notebooks').delete().eq('name', nbName); await supabase.from('pages').delete().eq('notebook_name', nbName); await supabase.from('notes').delete().eq('notebook_name', nbName);
+    if (confirm(`"${nbName}" defterini silmek istediğinize emin misiniz?`)) {
+      await supabase.from('notebooks').delete().eq('name', nbName);
+      await supabase.from('pages').delete().eq('notebook_name', nbName);
+      await supabase.from('notes').delete().eq('notebook_name', nbName);
       const remainingNotebooks = notebooks.filter(nb => nb.name !== nbName);
-      setNotebooks(remainingNotebooks); setPages(pages.filter(p => p.notebook_name !== nbName)); setNotes(notes.filter(n => n.notebook_name !== nbName));
+      setNotebooks(remainingNotebooks);
+      setPages(pages.filter(p => p.notebook_name !== nbName));
+      setNotes(notes.filter(n => n.notebook_name !== nbName));
       if (activeNotebook === nbName) setActiveNotebook(remainingNotebooks[0].name);
     }
   };
@@ -351,13 +570,17 @@ export default function Home() {
 
   const deleteTask = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    await supabase.from('tasks').delete().eq('id', id); setTasks(tasks.filter(t => t.id !== id));
+    await supabase.from('tasks').delete().eq('id', id);
+    setTasks(tasks.filter(t => t.id !== id));
   };
 
   const saveNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    const notePayload = { notebook_name: activeNotebook, page_id: activePageId, title: newTitle, content: newContent || 'İçerik girilmedi...', file_url: newFileUrl, file_type: newFileType, day_index: Number(newDayIndex), time: newTime, color: newColor, badge_color: newBadge };
+    const notePayload = {
+      notebook_name: activeNotebook, page_id: activePageId, title: newTitle, content: newContent || 'İçerik girilmedi...',
+      file_url: newFileUrl, file_type: newFileType, day_index: Number(newDayIndex), time: newTime, color: newColor, badge_color: newBadge,
+    };
     if (isEditMode && editingNoteId) {
       const { data }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
       if (data && data.length > 0) { setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n)); if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]); }
@@ -369,19 +592,29 @@ export default function Home() {
   };
 
   const deleteNote = async (id: string) => {
-    if(confirm("Silmek istediğinize emin misiniz?")) {
-      await supabase.from('notes').delete().eq('id', id); setNotes(notes.filter(n => n.id !== id)); setOpenedNotePage(null);
+    if(confirm("Bu notu silmek istediğinize emin misiniz?")) {
+      await supabase.from('notes').delete().eq('id', id);
+      setNotes(notes.filter(n => n.id !== id));
+      setOpenedNotePage(null);
     }
   };
 
-  const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsModalOpen(false); };
-  const getEmbedViewerUrl = (url: string, type: string) => { if (!url) return ''; if (type === 'pdf') return url; return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`; };
+  const resetForm = () => {
+    setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent('');
+    setNewFileUrl(''); setNewFileType('pdf'); setIsModalOpen(false);
+  };
 
+  const getEmbedViewerUrl = (url: string, type: string) => {
+    if (!url) return '';
+    if (type === 'pdf') return url;
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  };
+
+  // --- GÜVENLİK/GİRİŞ EKRANI ARAYÜZÜ ---
   if (isAuthLoading) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#042f2e]">
-        <Loader2 className="animate-spin text-teal-400 mb-4" size={48} />
-        <p className="text-teal-200 text-sm font-semibold animate-pulse">Sistem yükleniyor...</p>
+      <div className="h-screen w-full flex items-center justify-center bg-teal-950">
+        <Loader2 className="animate-spin text-teal-400" size={48} />
       </div>
     );
   }
@@ -390,45 +623,105 @@ export default function Home() {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#042f2e] via-[#0d9488] to-[#0f172a] p-4 font-sans">
         <div className="bg-white/95 backdrop-blur-xl w-full max-w-md rounded-3xl shadow-2xl p-8 border border-white/20 animate-fadeIn">
+          
           <div className="flex flex-col items-center mb-8">
             <Logo size={48} showText={false} />
             <h1 className="text-2xl font-extrabold text-gray-900 mt-4 tracking-tight">Notepad <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-teal-500">PRO</span></h1>
-            <p className="text-xs text-gray-500 font-medium mt-1">Sadece Davetiyeli / Onaylı Erişim</p>
+            <p className="text-xs text-gray-500 font-medium mt-1">AI Destekli Akıllı Not ve Planlama Asistanı</p>
           </div>
+
           <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-            <button onClick={() => { setIsLoginMode(true); setAuthError(''); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${isLoginMode ? 'bg-white text-teal-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Giriş Yap</button>
-            <button onClick={() => { setIsLoginMode(false); setAuthError(''); }} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${!isLoginMode ? 'bg-white text-teal-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Hesap Oluştur</button>
+            <button 
+              onClick={() => { setIsLoginMode(true); setAuthError(''); }} 
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${isLoginMode ? 'bg-white text-teal-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Giriş Yap
+            </button>
+            <button 
+              onClick={() => { setIsLoginMode(false); setAuthError(''); }} 
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${!isLoginMode ? 'bg-white text-teal-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Hesap Oluştur
+            </button>
           </div>
+
           <form onSubmit={handleEmailAuth} className="space-y-4">
-            {authError && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-semibold flex items-start gap-2 border border-red-100"><ShieldAlert size={16} className="shrink-0 mt-0.5" /> <span>{authError}</span></div>}
-            <div className="space-y-1"><label className="text-xs font-bold text-gray-600 pl-1">E-posta Adresi</label><div className="relative"><Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="isim@ornek.com" className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-teal-500 transition-all" required/></div></div>
-            <div className="space-y-1"><label className="text-xs font-bold text-gray-600 pl-1">Şifre</label><div className="relative"><KeyRound size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="••••••••" className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-teal-500 transition-all" required minLength={6}/></div></div>
-            <button type="submit" disabled={authLoading} className="w-full bg-teal-900 hover:bg-teal-800 text-white font-bold py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-2">{authLoading ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? <LogIn size={18} /> : <UserPlus size={18} />)}{authLoading ? 'Bekleyin...' : (isLoginMode ? 'Giriş Yap' : 'Kayıt Ol & Onaya Gönder')}</button>
+            {authError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-semibold flex items-start gap-2 border border-red-100">
+                <ShieldAlert size={16} className="shrink-0 mt-0.5" /> <span>{authError}</span>
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-600 pl-1">E-posta Adresi</label>
+              <div className="relative">
+                <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input 
+                  type="email" 
+                  value={authEmail} 
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="isim@ornek.com"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-teal-500 transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-600 pl-1">Şifre</label>
+              <div className="relative">
+                <KeyRound size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input 
+                  type="password" 
+                  value={authPassword} 
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:bg-white focus:border-teal-500 transition-all"
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={authLoading}
+              className="w-full bg-teal-900 hover:bg-teal-800 text-white font-bold py-3 rounded-xl shadow-lg shadow-teal-900/20 transition-all flex items-center justify-center gap-2 mt-2"
+            >
+              {authLoading ? <Loader2 size={18} className="animate-spin" /> : (isLoginMode ? <LogIn size={18} /> : <UserPlus size={18} />)}
+              {authLoading ? 'İşleminiz yapılıyor...' : (isLoginMode ? 'Giriş Yap' : 'Kayıt Ol')}
+            </button>
           </form>
-          <div className="relative my-6 flex items-center justify-center"><div className="border-t border-gray-200 w-full absolute"></div><span className="bg-white px-3 text-xs font-semibold text-gray-400 relative z-10">veya</span></div>
+
+          <div className="relative my-6 flex items-center justify-center">
+            <div className="border-t border-gray-200 w-full absolute"></div>
+            <span className="bg-white px-3 text-xs font-semibold text-gray-400 relative z-10">veya şununla devam et</span>
+          </div>
+
           <div className="space-y-2.5">
-            <button onClick={handleGoogleLogin} type="button" className="w-full bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2.5 text-sm"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Google ile Giriş</button>
+            <button 
+              onClick={handleGoogleLogin} 
+              type="button"
+              className="w-full bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2.5 text-sm"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Google
+            </button>
+            <button 
+              onClick={handleOutlookLogin} 
+              type="button"
+              className="w-full bg-[#0078D4] hover:bg-[#006abc] text-white font-bold py-2.5 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2.5 text-sm"
+            >
+              <svg width="18" height="18" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0 0H11V11H0V0Z" fill="#F25022"/><path d="M12 0H23V11H12V0Z" fill="#7FBA00"/><path d="M0 12H11V23H0V12Z" fill="#00A4EF"/><path d="M12 12H23V23H12V12Z" fill="#FFB900"/></svg>
+              Microsoft Outlook
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  if (userProfile && !userProfile.is_approved && userProfile.role !== 'admin') {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white max-w-sm w-full rounded-2xl shadow-xl border p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-2"><Clock size={32} /></div>
-          <h2 className="text-xl font-bold text-gray-900">Yönetici Onayı Bekleniyor</h2>
-          <p className="text-sm text-gray-600">Merhaba <b className="text-gray-900">{userProfile.email}</b>, hesabınız başarıyla oluşturuldu. Ancak uygulamayı kullanabilmeniz için sistem yöneticisinin başvurunuzu onaylaması gerekmektedir.</p>
-          <div className="pt-4 border-t border-gray-100">
-            <button onClick={handleLogout} className="text-sm font-semibold text-teal-700 hover:text-teal-900">Farklı Hesapla Giriş Yap / Çıkış</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // --- ANA UYGULAMA ARAYÜZÜ ---
   const notebookPages = pages.filter(p => p.notebook_name === activeNotebook);
   const filteredNotes = notes.filter(n => {
     if (n.notebook_name !== activeNotebook) return false;
@@ -436,9 +729,27 @@ export default function Home() {
     return true;
   });
 
+  const currentYearVal = currentDate.getFullYear();
+  const currentMonthVal = currentDate.getMonth();
+  const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
+  const firstDayOfMonthIndex = (new Date(currentYearVal, currentMonthVal, 1).getDay() + 6) % 7;
+  const weekDays = [...Array(7)].map((_, i) => {
+    const curr = new Date(currentDate);
+    curr.setDate(curr.getDate() - ((curr.getDay() + 6) % 7) + i);
+    return curr;
+  });
+
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
+      {/* MOBİL ÜST BAR */}
+      <div className="md:hidden bg-teal-900 text-white px-4 py-3 flex items-center justify-between z-20 shadow-md">
+        <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-1 rounded-lg hover:bg-white/10"><Menu size={22} /></button>
+        <Logo size={28} showText={true} />
+        <button onClick={() => setIsMobileTasksOpen(!isMobileTasksOpen)} className="p-1 rounded-lg hover:bg-white/10 text-teal-200"><CheckSquare size={20} /></button>
+      </div>
+
+      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-64 md:w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-xl md:shadow-md z-30 transition-transform duration-300 select-none ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
           <div className="flex items-center justify-between mb-6 px-1">
@@ -459,16 +770,23 @@ export default function Home() {
                     onClick={() => { setActiveNotebook(nb.name); setActivePageId(null); setActiveView('notes'); setOpenedNotePage(null); setIsInlineEditing(false); setIsDrawingMode(false); setIsMobileSidebarOpen(false); }}
                     className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing text-xs transition-all group ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white shadow-xs' : 'hover:bg-white/10 text-teal-100'}`}
                   >
-                    <div className="flex items-center gap-1.5 truncate"><GripVertical size={13} className="text-teal-400/60 shrink-0" /><Book size={14} className="shrink-0" /> <span className="truncate">{nb.name}</span></div>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <GripVertical size={13} className="text-teal-400/60 group-hover:text-teal-200 shrink-0" />
+                      <Book size={14} className="shrink-0" /> <span className="truncate">{nb.name}</span>
+                    </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={(e) => { e.stopPropagation(); setActiveNotebook(nb.name); setIsPageModalOpen(true); }} className="text-teal-200 hover:text-white p-0.5"><Plus size={12} /></button>
                       {notebooks.length > 1 && <button onClick={(e) => deleteNotebook(nb.name, e)} className="text-teal-200 hover:text-red-300 p-0.5"><Trash2 size={12} /></button>}
                     </div>
                   </div>
+                  {/* ALT SAYFALAR */}
                   {activeNotebook === nb.name && notebookPages.length > 0 && (
                     <div className="pl-6 space-y-1 my-1 border-l border-teal-700/50 ml-3">
                       {notebookPages.map(pg => (
-                        <div key={pg.id} onClick={() => { setActivePageId(pg.id); setActiveView('notes'); setOpenedNotePage(null); }} className={`flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer group ${activePageId === pg.id ? 'bg-teal-800/80 text-white font-semibold' : 'text-teal-200 hover:text-white hover:bg-teal-800/40'}`}>
+                        <div 
+                          key={pg.id} onClick={() => { setActivePageId(pg.id); setActiveView('notes'); setOpenedNotePage(null); }}
+                          className={`flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer group ${activePageId === pg.id ? 'bg-teal-800/80 text-white font-semibold' : 'text-teal-200 hover:text-white hover:bg-teal-800/40'}`}
+                        >
                           <div className="flex items-center gap-1.5 truncate"><FileText size={12} className="shrink-0" /><span className="truncate">{pg.title}</span></div>
                           <button onClick={(e) => deletePage(pg.id, e)} className="opacity-0 group-hover:opacity-100 text-teal-300 hover:text-red-300 p-0.5"><Trash2 size={10} /></button>
                         </div>
@@ -481,150 +799,435 @@ export default function Home() {
 
             <div className="space-y-2 pt-3 border-t border-teal-800">
               <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1">Plan</p>
-              <div onClick={() => { setActiveView('calendar'); setOpenedNotePage(null); setIsMobileSidebarOpen(false); }} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}>
+              <div 
+                onClick={() => { setActiveView('calendar'); setOpenedNotePage(null); setIsInlineEditing(false); setIsDrawingMode(false); setIsMobileSidebarOpen(false); }}
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}
+              >
                 <div className="flex items-center gap-2"><CalendarIcon size={14} /> Takvim</div>
+                {userSession?.provider_token && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Takvim Senkronize" />}
               </div>
             </div>
-
-            {userProfile?.role === 'admin' && (
-              <div className="space-y-2 pt-3 border-t border-teal-800">
-                <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1 text-rose-300">Yönetim</p>
-                <div onClick={() => { setActiveView('admin'); setOpenedNotePage(null); setIsMobileSidebarOpen(false); fetchAdminUsersList(); }} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'admin' && !openedNotePage ? 'bg-rose-500/30 font-medium text-white border border-rose-500/50' : 'hover:bg-white/5 text-teal-100'}`}>
-                  <div className="flex items-center gap-2"><ShieldCheck size={14} /> Kullanıcı Onayları</div>
-                </div>
-              </div>
-            )}
           </nav>
         </div>
 
         <div className="border-t border-teal-800 pt-3 flex items-center justify-between">
           <div className="flex items-center gap-2 truncate">
-            <div className={`w-7 h-7 rounded-full text-white flex items-center justify-center font-bold text-xs shrink-0 ${userProfile?.role === 'admin' ? 'bg-rose-600 shadow-[0_0_8px_rgba(225,29,72,0.6)]' : 'bg-teal-700'}`}>
-              {userProfile?.email?.charAt(0).toUpperCase()}
+            <div className="w-6 h-6 rounded-full bg-teal-800 text-teal-200 flex items-center justify-center font-bold text-[10px] shrink-0">
+              {userSession.user.email?.charAt(0).toUpperCase()}
             </div>
             <div className="flex flex-col truncate">
-              <span className="text-[10px] font-bold text-white truncate" title={userProfile?.email}>{userProfile?.email}</span>
-              <span className={`text-[9px] font-bold ${userProfile?.role === 'admin' ? 'text-rose-300' : 'text-teal-300'}`}>
-                {userProfile?.role === 'admin' ? 'Kurucu Yönetici' : 'Pro Hesap'}
-              </span>
+              <span className="text-[10px] font-bold text-white truncate">{userSession.user.email}</span>
+              <span className="text-[9px] text-teal-300">Pro Hesap</span>
             </div>
           </div>
-          <button onClick={handleLogout} className="text-teal-400 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Çıkış Yap"><LogIn size={16} className="rotate-180" /></button>
+          <button onClick={handleLogout} className="text-teal-400 hover:text-red-400 p-1 rounded transition-colors" title="Çıkış Yap">
+            <LogIn size={14} className="rotate-180" />
+          </button>
         </div>
       </aside>
 
+      {/* 2. ORTA ALAN */}
       <main className="flex-1 p-3 md:p-6 bg-white overflow-y-auto flex flex-col relative w-full">
-        {activeView === 'admin' && userProfile?.role === 'admin' ? (
-          <div className="flex-1 max-w-4xl mx-auto w-full animate-fadeIn mt-2">
-            <header className="mb-6 flex justify-between items-end border-b pb-4">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><ShieldCheck size={28} className="text-rose-600" /> Kullanıcı ve Onay Yönetimi</h2>
-                <p className="text-sm text-gray-500 mt-1">Sisteme kayıt olan kişileri buradan onaylayabilir veya erişimlerini kesebilirsiniz.</p>
-              </div>
-              <button onClick={fetchAdminUsersList} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"><RefreshCw size={14} /> Yenile</button>
-            </header>
-            
-            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 border-b text-xs text-gray-500 uppercase">
-                  <tr>
-                    <th className="px-5 py-3 font-semibold">Kullanıcı (E-posta)</th>
-                    <th className="px-5 py-3 font-semibold">Kayıt Tarihi</th>
-                    <th className="px-5 py-3 font-semibold text-center">Yetki Rolü</th>
-                    <th className="px-5 py-3 font-semibold text-center">Erişim Durumu</th>
-                    <th className="px-5 py-3 font-semibold text-right">İşlem</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {adminUsersList.map(user => (
-                    <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-5 py-3 font-medium text-gray-900 flex items-center gap-2">
-                        <Users size={16} className="text-gray-400" /> {user.email}
-                      </td>
-                      <td className="px-5 py-3 text-xs text-gray-500">{new Date(user.created_at).toLocaleDateString('tr-TR')}</td>
-                      <td className="px-5 py-3 text-center">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${user.role === 'admin' ? 'bg-rose-100 text-rose-700' : 'bg-gray-100 text-gray-700'}`}>{user.role}</span>
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {user.is_approved ? 
-                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-md font-bold flex items-center justify-center gap-1 w-max mx-auto"><CheckCircle2 size={12}/> ONAYLI</span> : 
-                          <span className="text-[10px] bg-amber-100 text-amber-700 px-2.5 py-1 rounded-md font-bold flex items-center justify-center gap-1 w-max mx-auto"><Clock size={12}/> BEKLİYOR</span>
-                        }
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        {user.role !== 'admin' && (
-                          <button 
-                            onClick={() => toggleUserApproval(user.id, user.is_approved)}
-                            className={`text-xs px-3 py-1.5 rounded-lg font-bold shadow-2xs transition-colors ${user.is_approved ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' : 'bg-teal-600 text-white hover:bg-teal-700'}`}
-                          >
-                            {user.is_approved ? 'Erişimi Kes' : 'Onayla'}
-                          </button>
-                        )}
-                        {user.role === 'admin' && <span className="text-xs text-gray-400 font-semibold italic">Yönetici</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : openedNotePage ? (
+        {openedNotePage ? (
+          /* NOT DETAY / DÜZENLEME EKRANI */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
-            <div className="flex justify-between mb-4"><button onClick={() => setOpenedNotePage(null)} className="flex items-center gap-1.5 text-xs font-semibold bg-teal-50 px-3 py-1.5 rounded-lg"><ArrowLeft size={16} /> Geri Dön</button></div>
-            <div className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-4 md:p-8 shadow-inner relative overflow-y-auto">
-               <h1 className="text-3xl font-bold font-serif mb-4">{openedNotePage.title}</h1>
-               <div className="text-base font-serif whitespace-pre-wrap">{openedNotePage.content}</div>
-               {openedNotePage.file_url && (
-                  <div className="mt-6 border border-teal-200 rounded-xl overflow-hidden bg-white shadow-md">
-                    <div className="bg-teal-900 text-white px-4 py-2.5 flex justify-between text-xs font-semibold">
-                      <span>Doküman Önizlemesi</span><a href={openedNotePage.file_url} target="_blank" className="bg-white/10 px-2 py-1 rounded">Sekmede Aç <ExternalLink size={12}/></a>
-                    </div>
-                    <iframe src={getEmbedViewerUrl(openedNotePage.file_url, openedNotePage.file_type || 'pdf')} className="w-full h-[500px]" />
+            <div className="flex items-center justify-between mb-4 pb-2 border-b flex-wrap gap-2">
+              <button onClick={() => setOpenedNotePage(null)} className="flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
+                <ArrowLeft size={16} /> Dashboard'a Dön
+              </button>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {isInlineEditing ? (
+                  <>
+                    <button onClick={() => toggleListening('pageContent')} className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium transition-all ${isListening && listeningTarget === 'pageContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200'}`}>
+                      {isListening && listeningTarget === 'pageContent' ? <MicOff size={14} /> : <Mic size={14} />} {isListening && listeningTarget === 'pageContent' ? 'Dinleniyor...' : '🎙️ Sesle Yazdır'}
+                    </button>
+                    <button onClick={() => setIsDrawingMode(!isDrawingMode)} className={`text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium transition-colors ${isDrawingMode ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+                      <PenTool size={14} /> {isDrawingMode ? 'Metin Modu' : '✏️ Çizim Yap'}
+                    </button>
+                    {isDrawingMode && <button onClick={clearCanvas} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1"><Eraser size={14} /> Temizle</button>}
+                    <button onClick={handleSaveInline} className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 font-bold shadow-xs"><Save size={14} /> Kaydet</button>
+                    <button onClick={() => { setIsInlineEditing(false); setIsDrawingMode(false); }} className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">İptal</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setIsInlineEditing(true)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium"><Edit size={14}/> Düzenle / Çiz / Dosya Yükle</button>
+                    <button onClick={() => deleteNote(openedNotePage.id)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium"><Trash2 size={14}/> Sil</button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {isInlineEditing && (
+              <div className="mb-4 p-3.5 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2 text-xs">
+                <p className="font-bold text-teal-900 flex items-center gap-1.5"><Paperclip size={14} /> Ekli Doküman (PDF, Word, Excel)</p>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <label className="cursor-pointer bg-teal-900 hover:bg-teal-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium shadow-2xs">
+                    {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {isUploading ? 'Yükleniyor...' : 'Cihazdan Dosya Seç / Yükle'}
+                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={(e) => handleFileUpload(e, 'inline')} className="hidden" disabled={isUploading} />
+                  </label>
+                  <span className="text-gray-400 font-semibold">veya URL:</span>
+                  <input type="url" value={pageFileUrl} onChange={(e) => setPageFileUrl(e.target.value)} placeholder="https://..." className="flex-1 border rounded-lg px-3 py-1.5 bg-white outline-none min-w-[200px]"/>
+                </div>
+              </div>
+            )}
+
+            <div 
+              ref={canvasContainerRef} className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-4 md:p-8 shadow-inner relative overflow-y-auto flex flex-col min-h-[450px]"
+              style={{ backgroundImage: 'repeating-linear-gradient(white, white 27px, #e8f0fe 28px)', lineHeight: '28px' }}
+            >
+              {isInlineEditing && (
+                <canvas ref={canvasRef} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} className={`absolute inset-0 z-20 ${isDrawingMode ? 'cursor-crosshair pointer-events-auto' : 'pointer-events-none'}`} />
+              )}
+              <div className="flex justify-between items-start mb-4 relative z-10 flex-wrap gap-2">
+                {isInlineEditing ? (
+                  <div className="flex items-center gap-2 w-full md:w-2/3">
+                    <input type="text" value={pageTitle} onChange={(e) => setPageTitle(e.target.value)} className="text-2xl md:text-3xl font-bold text-gray-900 font-serif bg-white/70 border border-teal-300 rounded px-2 py-1 outline-none flex-1" />
+                    <button type="button" onClick={() => toggleListening('pageTitle')} className={`p-2 rounded-lg border text-xs transition-colors ${isListening && listeningTarget === 'pageTitle' ? 'bg-red-600 text-white animate-pulse' : 'bg-white text-gray-700 border-gray-300'}`}><Mic size={16} /></button>
                   </div>
-               )}
+                ) : (
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight font-serif">{openedNotePage.title}</h1>
+                )}
+                <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">{MONTH_NAMES[currentMonthVal]} {currentYearVal}</span>
+              </div>
+              {openedNotePage.image_url && !isInlineEditing && (
+                <div className="my-4 max-w-md rounded-xl overflow-hidden border shadow-sm relative z-10"><img src={openedNotePage.image_url} alt="Çizim Görseli" className="w-full object-cover" /></div>
+              )}
+              <div className="flex-1 relative z-10 space-y-6">
+                {isInlineEditing ? (
+                  <textarea value={pageContent} onChange={(e) => setPageContent(e.target.value)} className="w-full h-full min-h-[200px] bg-transparent font-serif text-base text-gray-800 outline-none resize-none" style={{ lineHeight: '28px' }} placeholder="Sayfa üzerine yazın..." />
+                ) : (
+                  <div className="text-base text-gray-800 whitespace-pre-wrap font-serif pt-2">{openedNotePage.content}</div>
+                )}
+                {/* DOKÜMAN ÖNİZLEME */}
+                {openedNotePage.file_url && !isInlineEditing && (
+                  <div className="mt-6 border border-teal-200 rounded-2xl overflow-hidden bg-white shadow-md">
+                    <div className="bg-teal-900 text-white px-4 py-2.5 flex items-center justify-between text-xs font-semibold">
+                      <div className="flex items-center gap-2"><File size={16} className="text-teal-300" /><span>Ekli Doküman Önizlemesi ({openedNotePage.file_type ? openedNotePage.file_type.toUpperCase() : 'PDF'})</span></div>
+                      <a href={openedNotePage.file_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-teal-200 hover:text-white bg-white/10 px-2.5 py-1 rounded-lg transition-colors">Ayrı Sekmede Aç / İndir <ExternalLink size={12} /></a>
+                    </div>
+                    <div className="w-full h-[520px] bg-gray-100">
+                      <iframe src={getEmbedViewerUrl(openedNotePage.file_url, openedNotePage.file_type || 'pdf')} className="w-full h-full border-none" title="Doküman Önizleyici" />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : activeView === 'notes' ? (
+          /* NOT KARTLARI (DASHBOARD) */
           <>
             <header className="flex justify-between items-center mb-4 flex-wrap gap-2">
-              <div><h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Book size={20} className="text-teal-900" /> {activeNotebook} Defteri</h2></div>
-              <div className="flex gap-2"><button onClick={() => setIsPageModalOpen(true)} className="bg-teal-50 px-3 py-2 rounded-xl text-xs font-medium"><Plus size={15}/> Yeni Sayfa</button><button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-teal-900 text-white px-3.5 py-2 rounded-xl text-xs font-medium"><Plus size={16}/> Yeni Not Kartı</button></div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Book size={20} className="text-teal-900" /> {activeNotebook} Defteri</h2>
+                <p className="text-xs text-gray-500">{activePageId ? `Seçili Sayfa: ${pages.find(p => p.id === activePageId)?.title}` : 'Tüm Sayfalar Gösteriliyor'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsPageModalOpen(true)} className="bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all"><Plus size={15} /> Yeni Sayfa</button>
+                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><Plus size={16} /> Yeni Not Kartı</button>
+              </div>
             </header>
-            
+
             {notebookPages.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-3 mb-4 border-b text-xs">
-                <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg font-medium ${activePageId === null ? 'bg-teal-900 text-white' : 'bg-gray-100'}`}>Tüm Notlar</button>
-                {notebookPages.map(pg => (<button key={pg.id} onClick={() => setActivePageId(pg.id)} className={`px-3 py-1.5 rounded-lg font-medium flex gap-1 ${activePageId === pg.id ? 'bg-teal-900 text-white' : 'bg-gray-100'}`}><FileText size={13}/>{pg.title}</button>))}
+              <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 border-b border-gray-200 text-xs">
+                <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium transition-all ${activePageId === null ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Tüm Notlar ({notes.filter(n => n.notebook_name === activeNotebook).length})</button>
+                {notebookPages.map(pg => {
+                  const count = notes.filter(n => n.page_id === pg.id).length;
+                  return (
+                    <button key={pg.id} onClick={() => setActivePageId(pg.id)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium flex items-center gap-1.5 transition-all ${activePageId === pg.id ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      <FileText size={13} /><span>{pg.title}</span><span className="opacity-70 text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full">{count}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
-              {filteredNotes.map(note => (
-                <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border shadow-xs cursor-pointer flex flex-col justify-between min-h-[210px]`}>
-                  <div>
-                    <span className={`${note.badge_color} text-[10px] px-2 py-0.5 rounded-md font-bold`}>[{DAY_NAMES[note.day_index || 0]}]</span>
-                    <h3 className="font-bold text-sm text-gray-900 mt-2">{note.title}</h3>
-                    <p className="text-xs text-gray-700 mt-2 line-clamp-4">{note.content}</p>
+              {filteredNotes.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu bölümde henüz not kartı bulunmuyor.</p>
+              ) : (
+                filteredNotes.map(note => (
+                  <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}>
+                    <div className="space-y-2 mb-3">
+                      <div className="flex justify-between items-center flex-wrap gap-1">
+                        <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>[{DAY_NAMES[note.day_index || 0]}] [{note.time || '09:00'}]</span>
+                        {note.file_url && <span className="text-[10px] bg-teal-800 text-white px-2 py-0.5 rounded-md font-bold flex items-center gap-1"><Paperclip size={10} /> {note.file_type ? note.file_type.toUpperCase() : 'DOSYA'}</span>}
+                      </div>
+                      <h3 className="font-bold text-sm text-gray-900 group-hover:text-teal-950 transition-colors leading-snug">{note.title}</h3>
+                      <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                    </div>
+                    <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
+                      <span className="text-gray-500 font-medium text-[10px]">Detaylı Not</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Sayfayı Aç →</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border shadow-xs p-4"><h2 className="text-xl font-bold">Takvim Görünümü</h2><p className="text-sm mt-2">Takvim buraya gelecek...</p></div>
+          /* TAKVİM */
+          <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+            <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <button onClick={handleToday} className="px-3 py-1.5 border rounded-lg text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 shadow-2xs">Bugün</button>
+                <div className="flex items-center gap-1">
+                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronLeft size={18} /></button>
+                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronRight size={18} /></button>
+                </div>
+                <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight">
+                  {calendarMode === 'day' ? `${currentDate.getDate()} ${MONTH_NAMES[currentMonthVal]} ${currentYearVal}` : calendarMode === 'week' ? `${weekDays[0].getDate()} ${MONTH_NAMES[weekDays[0].getMonth()]} - ${weekDays[6].getDate()} ${MONTH_NAMES[weekDays[6].getMonth()]} ${currentYearVal}` : `${MONTH_NAMES[currentMonthVal]} ${currentYearVal}`}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex bg-gray-200/80 p-1 rounded-xl text-xs font-semibold text-gray-600">
+                  <button onClick={() => setCalendarMode('day')} className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'day' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}>Gün</button>
+                  <button onClick={() => setCalendarMode('week')} className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'week' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}>Hafta</button>
+                  <button onClick={() => setCalendarMode('month')} className={`px-3 py-1 rounded-lg transition-all ${calendarMode === 'month' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'hover:text-gray-900'}`}>Ay</button>
+                </div>
+                <button onClick={() => setIsCalendarSettingsOpen(true)} className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs relative">
+                  <Settings size={16} />{userSession?.provider_token && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />}
+                </button>
+                <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><Plus size={16} /> Ekle</button>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-auto">
+              {calendarMode === 'day' ? (
+                <div className="flex flex-col h-full bg-white p-4 max-w-3xl mx-auto">
+                  <div className="space-y-3 divide-y divide-gray-100 flex-1 overflow-y-auto pr-1">
+                    {hours.map(hour => {
+                      const dayOfWeekIndex = (currentDate.getDay() + 6) % 7;
+                      const matchedNotes = notes.filter(n => n.day_index === dayOfWeekIndex && n.time === hour);
+                      const matchedGoogleEvents = googleCalendarEvents.filter(g => g.dayNumber === currentDate.getDate() && g.monthNumber === currentDate.getMonth() && g.yearNumber === currentDate.getFullYear() && (g.time === hour || g.time === 'Tüm Gün'));
+                      const matchedOutlookEvents = outlookCalendarEvents.filter(o => o.dayNumber === currentDate.getDate() && o.monthNumber === currentDate.getMonth() && o.yearNumber === currentDate.getFullYear() && (o.time === hour || o.time === 'Tüm Gün'));
+
+                      return (
+                        <div key={hour} className="pt-2 flex gap-4 items-start min-h-[60px]">
+                          <span className="text-xs font-semibold text-gray-400 w-12 pt-1">{hour}</span>
+                          <div className="flex-1 space-y-1.5">
+                            {matchedNotes.map(note => (<div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-100'} p-2.5 rounded-xl border text-xs font-medium cursor-pointer shadow-2xs hover:shadow-xs flex justify-between items-center`}><div><p className="font-bold text-gray-900">{note.title}</p><p className="text-[11px] text-gray-700 line-clamp-1">{note.content}</p></div><span className="text-[10px] bg-white/60 px-2 py-0.5 rounded font-bold">Not</span></div>))}
+                            {matchedGoogleEvents.map(gEvent => (<div key={gEvent.id} className={`${gEvent.color} p-2.5 rounded-xl border text-xs font-medium shadow-2xs flex justify-between items-center`}><div><p className="font-bold text-sky-950">{gEvent.title}</p><p className="text-[11px] text-sky-900">{gEvent.content}</p></div><span className="text-[10px] bg-sky-200 text-sky-900 px-2 py-0.5 rounded font-bold">Google</span></div>))}
+                            {matchedOutlookEvents.map(oEvent => (<div key={oEvent.id} className={`${oEvent.color} p-2.5 rounded-xl border text-xs font-medium shadow-2xs flex justify-between items-center`}><div><p className="font-bold text-blue-950">{oEvent.title}</p><p className="text-[11px] text-blue-900">{oEvent.content}</p></div><span className="text-[10px] bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-bold">Outlook</span></div>))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : calendarMode === 'week' ? (
+                <div className="flex flex-col min-w-[700px] h-full">
+                  <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
+                    <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
+                    {weekDays.map((wDay, idx) => (
+                      <div key={idx} onClick={() => { setCurrentDate(wDay); setCalendarMode('day'); }} className={`py-2 text-xs cursor-pointer hover:bg-teal-50/50 border-r border-gray-200 ${wDay.toDateString() === new Date().toDateString() ? 'bg-teal-50 text-teal-900 font-bold' : 'text-gray-700'}`}>
+                        <div>{DAY_NAMES[idx]}</div><div className={`text-sm font-extrabold mt-0.5 ${wDay.toDateString() === new Date().toDateString() ? 'text-teal-900' : 'text-gray-800'}`}>{wDay.getDate()}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="divide-y divide-gray-100 flex-1 overflow-y-auto">
+                    {hours.map((hour) => (
+                      <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[55px]">
+                        <div className="text-[11px] text-gray-400 font-medium text-center pt-1 border-r border-gray-200 bg-gray-50/30">{hour}</div>
+                        {weekDays.map((wDay, dayIdx) => (
+                          <div key={dayIdx} className="border-r border-gray-100 p-1 relative flex flex-col gap-1">
+                            {notes.filter(n => n.day_index === dayIdx && n.time === hour).map(note => (<div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-teal-100'} p-1 rounded text-[10px] font-semibold border border-black/10 cursor-pointer truncate`}>{note.title}</div>))}
+                            {googleCalendarEvents.filter(g => g.dayNumber === wDay.getDate() && g.monthNumber === wDay.getMonth() && g.yearNumber === wDay.getFullYear() && (g.time === hour || g.time === 'Tüm Gün')).map(gEvent => (<div key={gEvent.id} className={`${gEvent.color} p-1 rounded text-[10px] font-semibold border border-sky-300 truncate`}>{gEvent.title}</div>))}
+                            {outlookCalendarEvents.filter(o => o.dayNumber === wDay.getDate() && o.monthNumber === wDay.getMonth() && o.yearNumber === wDay.getFullYear() && (o.time === hour || o.time === 'Tüm Gün')).map(oEvent => (<div key={oEvent.id} className={`${oEvent.color} p-1 rounded text-[10px] font-semibold border border-blue-300 truncate`}>{oEvent.title}</div>))}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
+                  {DAY_NAMES.map(d => <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">{d}</div>)}
+                  {Array.from({ length: firstDayOfMonthIndex }).map((_, i) => <div key={'empty-' + i} className="min-h-[85px] bg-gray-50/30 p-1" />)}
+                  {Array.from({ length: daysInMonth }).map((_, i) => {
+                    const dayNum = i + 1; const dayOfWeek = (i + firstDayOfMonthIndex) % 7;
+                    const isToday = new Date().getDate() === dayNum && new Date().getMonth() === currentMonthVal && new Date().getFullYear() === currentYearVal;
+                    return (
+                      <div key={i} onClick={() => handleSelectDay(dayNum)} className={`min-h-[85px] p-1.5 flex flex-col gap-1 overflow-hidden cursor-pointer group ${isToday ? 'bg-teal-50/40' : 'bg-white hover:bg-teal-50/30'}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-teal-900 text-white' : 'text-gray-600'}`}>{dayNum}</span>
+                        </div>
+                        <div className="flex flex-col gap-1 overflow-y-auto">
+                          {notes.filter(n => (n.day_index % 7) === dayOfWeek).slice(0, 2).map(note => (<div key={note.id} onClick={(e) => { e.stopPropagation(); handleOpenPage(note); }} className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate`}>{note.title}</div>))}
+                          {googleCalendarEvents.filter(e => e.dayNumber === dayNum && e.monthNumber === currentMonthVal && e.yearNumber === currentYearVal).slice(0, 2).map(gEvent => (<div key={gEvent.id} className={`${gEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate border border-sky-300`}>{gEvent.title}</div>))}
+                          {outlookCalendarEvents.filter(o => o.dayNumber === dayNum && o.monthNumber === currentMonthVal && o.yearNumber === currentYearVal).slice(0, 2).map(oEvent => (<div key={oEvent.id} className={`${oEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate border border-blue-300`}>{oEvent.title}</div>))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </main>
-      
-      <aside className="hidden md:flex flex-col w-72 bg-gray-50 border-l p-5 z-30">
-        <h3 className="font-bold text-xs flex items-center gap-1.5 mb-3"><CheckSquare size={16} className="text-teal-900"/> Görevlerim</h3>
-        <form onSubmit={addTask} className="flex gap-1.5 mb-3"><input type="text" placeholder="Yeni görev..." value={newTaskTitle} onChange={(e)=>setNewTaskTitle(e.target.value)} className="flex-1 text-xs border rounded-lg px-2 py-1.5" /><button type="submit" className="bg-teal-900 text-white px-2 rounded-lg text-xs">Ekle</button></form>
-        <div className="space-y-1.5">
-          {tasks.map(task => (
-            <div key={task.id} className="bg-white p-2 rounded-lg border flex justify-between items-center"><div className="flex gap-2"><input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} className="rounded" /><span className={`text-xs ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</span></div><button onClick={(e) => deleteTask(task.id, e)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button></div>
-          ))}
+
+      {/* 3. SAĞ PANEL (GÖREVLER) */}
+      <aside className={`fixed md:relative inset-y-0 right-0 w-72 bg-gray-50 border-l border-gray-200 p-5 flex flex-col gap-5 overflow-y-auto z-30 transition-transform duration-300 ${isMobileTasksOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
+        <div className="flex justify-between items-center md:hidden pb-2 border-b"><h3 className="font-bold text-xs text-gray-800">Görevler</h3><button onClick={() => setIsMobileTasksOpen(false)} className="text-gray-500"><X size={18} /></button></div>
+        <div>
+          <h3 className="font-bold text-xs text-gray-800 flex items-center gap-1.5 mb-3 uppercase tracking-wider"><CheckSquare size={16} className="text-teal-900" /> Görevlerim</h3>
+          <form onSubmit={addTask} className="flex gap-1.5 mb-3">
+            <input type="text" placeholder="Yeni görev..." value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} className="flex-1 text-xs border rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+            <button type="submit" className="bg-teal-900 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium">Ekle</button>
+          </form>
+          <div className="space-y-1.5">
+            {tasks.map(task => (
+              <div key={task.id} className="bg-white p-2 rounded-lg border flex items-center justify-between group shadow-xs">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id, task.completed)} className="rounded text-teal-900 w-3.5 h-3.5 cursor-pointer" />
+                  <span className={`text-xs truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.title}</span>
+                </div>
+                <button onClick={(e) => deleteTask(task.id, e)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
         </div>
       </aside>
 
+      {/* GEMINI AI ASİSTAN */}
+      <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end">
+        {isGeminiOpen && (
+          <div className="mb-3 w-80 md:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col h-[480px] overflow-hidden animate-fadeIn">
+            <div className="bg-gradient-to-r from-teal-950 via-teal-900 to-black text-white p-3.5 flex justify-between items-center shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="bg-gradient-to-tr from-rose-500 to-teal-400 p-1.5 rounded-lg"><Sparkles size={16} className="text-white" /></div>
+                <div>
+                  <h4 className="font-bold text-xs flex items-center gap-1">Gemini AI Asistan <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-mono">3.7 Flash</span></h4>
+                  <p className="text-[10px] text-teal-200">{openedNotePage ? `Bağlam: "${openedNotePage.title}"` : 'Genel Asistan Modu'}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsGeminiOpen(false)} className="text-teal-200 hover:text-white p-1"><X size={18} /></button>
+            </div>
+            <div className="flex-1 p-3 overflow-y-auto space-y-3 bg-gray-50/50 text-xs">
+              {geminiMessages.map((msg, idx) => (
+                <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'model' && <div className="w-6 h-6 rounded-full bg-teal-900 text-white flex items-center justify-center shrink-0 mt-0.5"><Bot size={13} /></div>}
+                  <div className={`p-2.5 rounded-2xl max-w-[82%] leading-relaxed ${msg.role === 'user' ? 'bg-teal-900 text-white rounded-br-none' : 'bg-white border text-gray-800 shadow-2xs rounded-bl-none whitespace-pre-wrap'}`}>{msg.text}</div>
+                  {msg.role === 'user' && <div className="w-6 h-6 rounded-full bg-gray-300 text-gray-700 flex items-center justify-center shrink-0 mt-0.5"><User size={13} /></div>}
+                </div>
+              ))}
+              {isGeminiLoading && <div className="flex gap-2 items-center text-gray-400 italic"><Bot size={14} className="animate-spin text-teal-700" /><span>Gemini düşünüyor...</span></div>}
+              <div ref={chatBottomRef} />
+            </div>
+            {openedNotePage && (
+              <div className="px-2 py-1.5 bg-gray-100/80 border-t flex gap-1 overflow-x-auto text-[10px]">
+                <button onClick={() => handleSendGemini("Bu notu ve ekli dokümanı 3 kısa maddede özetle.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">📝 Notu Özetle</button>
+                <button onClick={() => handleSendGemini("Bu nottaki imla hatalarını düzelt ve üslubu geliştirilmiş versiyonunu öner.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">✍️ Yazımı Düzenle</button>
+              </div>
+            )}
+            <div className="p-2 bg-white border-t flex gap-1.5 items-center">
+              <input type="text" value={geminiInput} onChange={(e) => setGeminiInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendGemini()} placeholder="Gemini'ye sorun..." className="flex-1 border rounded-xl px-3 py-2 text-xs outline-none bg-gray-50 focus:bg-white focus:border-teal-600 transition-colors"/>
+              <button onClick={() => handleSendGemini()} disabled={isGeminiLoading || !geminiInput.trim()} className="bg-teal-900 hover:bg-teal-800 disabled:opacity-40 text-white p-2 rounded-xl transition-all"><Send size={15} /></button>
+            </div>
+          </div>
+        )}
+        <button onClick={() => setIsGeminiOpen(!isGeminiOpen)} className="bg-gradient-to-r from-teal-950 via-teal-900 to-black hover:scale-105 text-white p-3.5 rounded-2xl shadow-xl border border-teal-500/40 flex items-center gap-2 font-bold text-xs transition-all group">
+          <div className="bg-gradient-to-tr from-rose-500 to-teal-400 p-1 rounded-lg"><Sparkles size={18} className="text-white animate-pulse" /></div><span className="hidden md:inline">Gemini AI</span>
+        </button>
+      </div>
+
+      {/* MODALLAR */}
+      {isCalendarSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b pb-3"><h3 className="font-bold text-base text-gray-900 flex items-center gap-2"><Settings size={18} className="text-teal-900" /> Takvim Entegrasyonları</h3><button onClick={() => setIsCalendarSettingsOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button></div>
+            <div className="space-y-3">
+              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5"><span className="text-xl">🌐</span><div><p className="font-bold text-xs text-gray-900">Google Calendar</p><p className="text-[10px] text-gray-500">Google Etkinlik Senkronizasyonu</p></div></div>
+                <button onClick={handleGoogleLogin} disabled={isSyncing} className="text-xs bg-white hover:bg-gray-100 border text-gray-800 font-semibold px-3 py-1.5 rounded-lg shadow-2xs">Bağlan</button>
+              </div>
+              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
+                <div className="flex items-center gap-2.5"><span className="text-xl">📫</span><div><p className="font-bold text-xs text-gray-900">Outlook Takvim</p><p className="text-[10px] text-gray-500">Microsoft Graph API Senkronizasyonu</p></div></div>
+                <button onClick={handleOutlookLogin} disabled={isSyncing} className="text-xs bg-blue-700 hover:bg-blue-800 text-white font-semibold px-3 py-1.5 rounded-lg shadow-2xs">Bağlan</button>
+              </div>
+            </div>
+            <div className="flex justify-end pt-2"><button onClick={() => setIsCalendarSettingsOpen(false)} className="px-4 py-2 bg-teal-900 text-white rounded-lg text-xs font-medium hover:bg-teal-800">Tamam</button></div>
+          </div>
+        </div>
+      )}
+
+      {isPageModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-bold text-base text-gray-900">"{activeNotebook}" İçin Yeni Sayfa</h3>
+            <form onSubmit={addPage} className="space-y-3">
+              <input type="text" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Sayfa başlığı..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none" required />
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsPageModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">İptal</button>
+                <button type="submit" className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs">Oluştur</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isNotebookModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-bold text-base text-gray-900">Yeni Defter Oluştur</h3>
+            <form onSubmit={addNotebook} className="space-y-3">
+              <input type="text" value={newNotebookName} onChange={(e) => setNewNotebookName(e.target.value)} placeholder="Defter adı..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none" required />
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsNotebookModalOpen(false)} className="px-3 py-1.5 border rounded-lg text-xs">İptal</button>
+                <button type="submit" className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs">Oluştur</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
+            <h3 className="font-bold text-base text-gray-900">{isEditMode ? 'Not Kartını Düzenle' : 'Yeni Not Kartı Ekle'}</h3>
+            <form onSubmit={saveNote} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 flex justify-between items-center mb-1"><span>Başlık</span><span className="text-[10px] text-teal-700">🎙️ Sesle Söyle</span></label>
+                <div className="flex gap-2">
+                  <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Başlık yazın..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none" required />
+                  <button type="button" onClick={() => toggleListening('modalTitle')} className={`p-2 rounded-lg border text-xs flex items-center justify-center ${isListening && listeningTarget === 'modalTitle' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-50 text-gray-700'}`}><Mic size={16} /></button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 flex justify-between items-center mb-1"><span>İçerik</span><span className="text-[10px] text-teal-700">🎙️ Sesle Ekle</span></label>
+                <div className="relative">
+                  <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder="Detaylar..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none h-24 resize-none pr-10" />
+                  <button type="button" onClick={() => toggleListening('modalContent')} className={`absolute right-2 top-2 p-1.5 rounded-lg border text-xs ${isListening && listeningTarget === 'modalContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-100 text-gray-700'}`}><Mic size={14} /></button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Doküman Ekle (PDF / Word / Excel)</label>
+                <div className="space-y-1.5">
+                  <label className="cursor-pointer bg-teal-900 hover:bg-teal-800 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-2xs">
+                    {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} {isUploading ? 'Dosya Yükleniyor...' : '📂 Bilgisayardan Dosya Seç'}
+                    <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={(e) => handleFileUpload(e, 'modal')} className="hidden" disabled={isUploading} />
+                  </label>
+                  {newFileUrl && <p className="text-[10px] text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200 truncate">✓ Yüklendi: {newFileUrl}</p>}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Kart Rengi</label>
+                <div className="flex gap-2">
+                  {colorOptions.map(col => (<div key={col.name} onClick={() => { setNewColor(col.card); setNewBadge(col.badge); }} className={`w-6 h-6 rounded-full cursor-pointer border-2 ${col.card.split(' ')[0]} ${newColor === col.card ? 'border-gray-800 scale-110' : 'border-transparent'}`} title={col.name} />))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="text-xs text-gray-500 block mb-1">Gün</label><select value={newDayIndex} onChange={(e) => setNewDayIndex(Number(e.target.value))} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{DAY_NAMES.map((d, idx) => <option key={d} value={idx}>{d}</option>)}</select></div>
+                <div><label className="text-xs text-gray-500 block mb-1">Saat</label><select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onClick={resetForm} className="px-3 py-1.5 border rounded-lg text-xs text-gray-600">İptal</button>
+                <button type="submit" disabled={isUploading} className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs disabled:opacity-50">{isEditMode ? 'Güncelle' : 'Oluştur'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

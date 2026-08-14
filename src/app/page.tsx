@@ -18,7 +18,7 @@ const MONTH_NAMES = [
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
-// NETFLIX & FUTURISTIC ESİNTİLİ 3D 'N' LOGOSU BİLEŞENİ
+// NETFLIX & FUTURISTIC ESİNTİLİ 'N' LOGO BİLEŞENİ
 function Logo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 select-none cursor-pointer group">
@@ -37,23 +37,19 @@ function Logo({ size = 32, showText = true }: { size?: number; showText?: boolea
               <stop offset="0%" stopColor="#0d9488" />
               <stop offset="100%" stopColor="#042f2e" />
             </linearGradient>
-
             <linearGradient id="diagonalBar" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#ff2a5f" />
               <stop offset="50%" stopColor="#e11d48" />
               <stop offset="100%" stopColor="#9f1239" />
             </linearGradient>
-
             <linearGradient id="rightBar" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#14b8a6" />
               <stop offset="100%" stopColor="#0f766e" />
             </linearGradient>
-
             <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="-2" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.7" />
             </filter>
           </defs>
-
           <rect x="18" y="15" width="20" height="70" rx="4" fill="url(#leftBar)" />
           <rect x="62" y="15" width="20" height="70" rx="4" fill="url(#rightBar)" />
           <path 
@@ -93,9 +89,9 @@ export default function Home() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobileTasksOpen, setIsMobileTasksOpen] = useState(false);
 
-  // DİNAMİK TARİH STATE'LERİ
+  // DİNAMİK TARİH VE NAVİGASYON STATE'LERİ
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
+  const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('month');
 
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
 
@@ -109,7 +105,6 @@ export default function Home() {
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
 
-  // DRAG & DROP
   const draggedNotebookIndex = useRef<number | null>(null);
 
   // SPEECH TO TEXT
@@ -135,10 +130,11 @@ export default function Home() {
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
 
-  // GOOGLE OAUTH
+  // GOOGLE OAUTH VE GERÇEK CALENDAR SENKRONİZASYONU
   const [userSession, setUserSession] = useState<any>(null);
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
 
   const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
 
@@ -170,35 +166,39 @@ export default function Home() {
     });
   };
 
+  // GERÇEK GOOGLE CALENDAR API VERİ ÇEKME MOTORU
   const fetchGoogleCalendarEvents = async (providerToken: string) => {
     setIsSyncing(true);
     try {
-      const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=25&orderBy=startTime&singleEvents=true&timeMin=' + new Date().toISOString(), {
-        headers: {
-          Authorization: `Bearer ${providerToken}`,
-        },
-      });
+      const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+      const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${timeMin}&timeMax=${timeMax}`, 
+        {
+          headers: { Authorization: `Bearer ${providerToken}` }
+        }
+      );
       const data = await res.json();
       if (data.items) {
-        const fetchedGoogleEvents = data.items.map((event: any, idx: number) => ({
-          id: 'gcal-' + (event.id || idx),
-          notebook_name: activeNotebook,
-          title: '📅 ' + (event.summary || 'Google Etkinliği'),
-          content: event.description || 'Google Calendar üzerinden senkronize edildi.',
-          day_index: event.start?.dateTime ? (new Date(event.start.dateTime).getDay() + 6) % 7 : 0,
-          time: event.start?.dateTime ? new Date(event.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00',
-          color: 'bg-sky-50 border-sky-200 text-sky-950',
-          badge_color: 'bg-sky-200 text-sky-900',
-        }));
-
-        setNotes(prev => {
-          const existingIds = new Set(prev.map(n => n.id));
-          const uniqueEvents = fetchedGoogleEvents.filter((g: any) => !existingIds.has(g.id));
-          return [...prev, ...uniqueEvents];
+        const events = data.items.map((item: any) => {
+          const startDate = item.start?.dateTime ? new Date(item.start.dateTime) : (item.start?.date ? new Date(item.start.date) : new Date());
+          return {
+            id: 'gcal-' + item.id,
+            title: '📅 ' + (item.summary || 'Google Etkinliği'),
+            content: item.description || 'Google Calendar etkinliği.',
+            date: startDate,
+            dayNumber: startDate.getDate(),
+            time: item.start?.dateTime ? startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Tüm Gün',
+            color: 'bg-sky-100 border-sky-300 text-sky-950',
+            badge_color: 'bg-sky-200 text-sky-900',
+            isGoogleEvent: true
+          };
         });
+        setGoogleCalendarEvents(events);
       }
     } catch (err) {
-      console.error("Google Calendar verileri çekilemedi:", err);
+      console.error("Google Calendar verileri alınırken hata oluştu:", err);
     } finally {
       setIsSyncing(false);
     }
@@ -225,8 +225,10 @@ export default function Home() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUserSession(null);
+    setGoogleCalendarEvents([]);
   };
 
+  // DİNAMİK TARİH GEZİNTİSİ
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
     if (calendarMode === 'week') {
@@ -235,6 +237,7 @@ export default function Home() {
       next.setMonth(next.getMonth() - 1);
     }
     setCurrentDate(next);
+    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
   };
 
   const handleNextPeriod = () => {
@@ -245,10 +248,13 @@ export default function Home() {
       next.setMonth(next.getMonth() + 1);
     }
     setCurrentDate(next);
+    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date());
+    const today = new Date();
+    setCurrentDate(today);
+    if (userSession?.provider_token) fetchGoogleCalendarEvents(userSession.provider_token);
   };
 
   const handleDragStart = (index: number) => {
@@ -553,14 +559,16 @@ export default function Home() {
 
   const filteredNotes = notes.filter(n => n.notebook_name === activeNotebook);
 
+  // SEÇİLİ AYIN DİNAMİK HESAPLANMASI
   const currentYearVal = currentDate.getFullYear();
   const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
+  const firstDayOfMonthIndex = (new Date(currentYearVal, currentMonthVal, 1).getDay() + 6) % 7; // Pzt=0 Yapılandırması
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
       
-      {/* MOBİL ÜST BAR (YENİ LOGO ENTEGRELİ) */}
+      {/* MOBİL ÜST BAR */}
       <div className="md:hidden bg-teal-900 text-white px-4 py-3 flex items-center justify-between z-20 shadow-md">
         <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-1 rounded-lg hover:bg-white/10">
           <Menu size={22} />
@@ -571,7 +579,7 @@ export default function Home() {
         </button>
       </div>
 
-      {/* 1. SOL KENAR ÇUBUĞU (YENİ LOGO ENTEGRELİ) */}
+      {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-64 md:w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-xl md:shadow-md z-30 transition-transform duration-300 select-none ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
           <div className="flex items-center justify-between mb-6 px-1">
@@ -636,14 +644,14 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <CalendarIcon size={14} /> Takvim
                 </div>
-                {userSession && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Google Bağlı" />}
+                {userSession && <span className="w-2 h-2 rounded-full bg-emerald-400" title="Google Takvim Senkronize" />}
               </div>
             </div>
           </nav>
         </div>
 
         <div className="text-[10px] text-teal-300 border-t border-teal-800 pt-3 flex items-center justify-between">
-          <span>{userSession ? userSession.user.email.split('@')[0] : 'Oturum Yok'}</span>
+          <span className="truncate max-w-[120px]">{userSession ? userSession.user.email : 'Oturum Yok'}</span>
           <span>🟢</span>
         </div>
       </aside>
@@ -819,7 +827,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* DİNAMİK TAKVİM */
+          /* TAM DİNAMİK VE GERÇEK SENKRONİZASYONLU TAKVİM */
           <div className="flex-1 flex flex-col h-full bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
             <header className="flex justify-between items-center px-4 md:px-6 py-3.5 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
               <div className="flex items-center gap-3">
@@ -827,8 +835,8 @@ export default function Home() {
                   Bugün
                 </button>
                 <div className="flex items-center gap-1">
-                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronLeft size={18} /></button>
-                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600"><ChevronRight size={18} /></button>
+                  <button onClick={handlePrevPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Önceki Ay / Hafta"><ChevronLeft size={18} /></button>
+                  <button onClick={handleNextPeriod} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-600" title="Sonraki Ay / Hafta"><ChevronRight size={18} /></button>
                 </div>
                 <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight">
                   {MONTH_NAMES[currentMonthVal]} {currentYearVal}
@@ -853,9 +861,11 @@ export default function Home() {
 
                 <button 
                   onClick={() => setIsCalendarSettingsOpen(true)}
-                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs"
+                  className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs relative"
+                  title="Google Takvim Entegrasyonu"
                 >
                   <Settings size={16} />
+                  {userSession && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />}
                 </button>
                 <button 
                   onClick={() => { resetForm(); setIsModalOpen(true); }} 
@@ -868,11 +878,12 @@ export default function Home() {
 
             <div className="flex-1 overflow-auto">
               {calendarMode === 'week' ? (
+                /* HAFTALIK GÖRÜNÜM */
                 <div className="flex flex-col min-w-[650px]">
                   <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50 text-center sticky top-0 z-10">
                     <div className="py-2.5 text-[11px] font-bold text-gray-400 border-r border-gray-200">Saat</div>
                     {DAY_NAMES.map((day, idx) => (
-                      <div key={day} className={`py-2.5 text-xs font-bold border-r border-gray-200 ${idx === 3 ? 'bg-teal-50 text-teal-900' : 'text-gray-700'}`}>
+                      <div key={day} className="py-2.5 text-xs font-bold border-r border-gray-200 text-gray-700">
                         {day}
                       </div>
                     ))}
@@ -905,28 +916,58 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
+                /* AYLIK DİNAMİK IZGARA (TÜM AY VE YILLAR İÇİN TAM DİZİLİM) */
                 <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-gray-200 min-w-[500px] h-full">
                   {DAY_NAMES.map(d => (
                     <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">
                       {d}
                     </div>
                   ))}
+                  
+                  {/* Ayın İlk Gününe Kadar Olan Boşluklar */}
+                  {Array.from({ length: firstDayOfMonthIndex }).map((_, i) => (
+                    <div key={'empty-' + i} className="min-h-[85px] bg-gray-50/30 p-1" />
+                  ))}
+
+                  {/* Seçili Ayın Günleri */}
                   {Array.from({ length: daysInMonth }).map((_, i) => {
                     const dayNum = i + 1;
-                    const matchedNotes = notes.filter(n => (n.day_index % 7) === (i % 7));
+                    const matchedNotes = notes.filter(n => (n.day_index % 7) === ((i + firstDayOfMonthIndex) % 7));
+                    const matchedGoogleEvents = googleCalendarEvents.filter(e => e.dayNumber === dayNum);
+
+                    const isToday = 
+                      new Date().getDate() === dayNum && 
+                      new Date().getMonth() === currentMonthVal && 
+                      new Date().getFullYear() === currentYearVal;
+
                     return (
-                      <div key={i} className="min-h-[85px] p-1 bg-white hover:bg-gray-50/50 transition-colors flex flex-col gap-1 overflow-hidden">
-                        <span className="text-xs font-bold text-gray-500 w-5 h-5 flex items-center justify-center rounded-full">
-                          {dayNum}
-                        </span>
+                      <div key={i} className={`min-h-[85px] p-1.5 transition-colors flex flex-col gap-1 overflow-hidden ${isToday ? 'bg-teal-50/40' : 'bg-white hover:bg-gray-50/60'}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-teal-900 text-white' : 'text-gray-600'}`}>
+                            {dayNum}
+                          </span>
+                        </div>
+                        
                         <div className="flex flex-col gap-1 overflow-y-auto">
-                          {matchedNotes.slice(0, 3).map(note => (
+                          {/* Uygulama Notları */}
+                          {matchedNotes.slice(0, 2).map(note => (
                             <div 
                               key={note.id} 
                               onClick={() => handleOpenPage(note)}
                               className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer`}
                             >
                               {note.title}
+                            </div>
+                          ))}
+
+                          {/* Gerçek Google Calendar Etkinlikleri */}
+                          {matchedGoogleEvents.map(gEvent => (
+                            <div 
+                              key={gEvent.id}
+                              onClick={() => alert(`Google Etkinliği: ${gEvent.title}\nSaat: ${gEvent.time}\nAçıklama: ${gEvent.content}`)}
+                              className={`${gEvent.color} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer border border-sky-300 shadow-2xs`}
+                            >
+                              {gEvent.title}
                             </div>
                           ))}
                         </div>
@@ -987,12 +1028,12 @@ export default function Home() {
                   <span className="text-xl">🌐</span>
                   <div>
                     <p className="font-bold text-xs text-gray-900">Google Hesabı</p>
-                    <p className="text-[11px] text-gray-500">Google Calendar ile senkronizasyon</p>
+                    <p className="text-[11px] text-gray-500">Google Calendar ile Canlı Senkronizasyon</p>
                   </div>
                 </div>
                 {userSession ? (
                   <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={10} /> Bağlı
+                    <CheckCircle2 size={10} /> Senkronize Edildi
                   </span>
                 ) : (
                   <span className="text-[10px] bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -1003,17 +1044,17 @@ export default function Home() {
 
               {userSession ? (
                 <div className="pt-2 space-y-2">
-                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                    Oturum Açıldı: <b>{userSession.user.email}</b>
+                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                    Bağlı Hesap: <b>{userSession.user.email}</b>
                   </p>
                   <button onClick={handleLogout} className="w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 font-medium py-2 rounded-lg transition-colors">
-                    Oturumu Kapat
+                    Oturumu Kapat / Bağlantıyı Kes
                   </button>
                 </div>
               ) : (
                 <div className="pt-2 space-y-2">
-                  <button onClick={handleGoogleLogin} disabled={isSyncing} className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2">
-                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Giriş Yap</span>}
+                  <button onClick={handleGoogleLogin} disabled={isSyncing} className="w-full text-xs bg-white hover:bg-gray-100 text-gray-800 border font-semibold py-2.5 rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2">
+                    {isSyncing ? <RefreshCw size={14} className="animate-spin text-teal-700" /> : <span>🌐 Google ile Giriş Yap & Senkronize Et</span>}
                   </button>
                 </div>
               )}

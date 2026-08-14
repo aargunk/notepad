@@ -12,11 +12,9 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -251,18 +249,13 @@ export default function Home() {
     setGoogleCalendarEvents([]);
   };
 
-  // GEMINI AI CHATBOT FONKSİYONU (NOT BAĞLAMI OKUMA VE YANIT ÜRETME)
+  // GEMINI AI CHATBOT FONKSİYONU (BACKEND API ROUTE UYUMLU)
   const handleSendGemini = async (overridePrompt?: string) => {
     const promptToSend = overridePrompt || geminiInput;
     if (!promptToSend.trim() || isGeminiLoading) return;
 
     if (!userSession) {
       alert("Gemini AI Asistanını kullanabilmek için lütfen Google hesabınızla giriş yapın.");
-      return;
-    }
-
-    if (!GEMINI_API_KEY) {
-      alert("NEXT_PUBLIC_GEMINI_API_KEY Vercel ortam değişkenlerinde bulunamadı. Lütfen API Key ekleyin.");
       return;
     }
 
@@ -279,21 +272,22 @@ export default function Home() {
 
       const fullPrompt = `Sen Notepad Pro uygulamasının akıllı AI asistanısın. Kullanıcıya Türkçe, nazik ve üretken bir şekilde yardımcı ol.${contextText}Kullanıcının sorusu / talebi: ${promptToSend}`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      const res = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }]
-        })
+        body: JSON.stringify({ prompt: fullPrompt }),
       });
 
       const data = await res.json();
-      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Gemini yanıt oluşturamadı. Lütfen tekrar deneyin.';
 
-      setGeminiMessages(prev => [...prev, { role: 'model', text: responseText }]);
+      if (data.error) {
+        setGeminiMessages(prev => [...prev, { role: 'model', text: `Hata: ${data.error}` }]);
+      } else {
+        setGeminiMessages(prev => [...prev, { role: 'model', text: data.text }]);
+      }
     } catch (err) {
       console.error("Gemini AI Hatası:", err);
-      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Üzgünüm, bir hata oluştu. Lütfen internet bağlantınızı ve API anahtarınızı kontrol edin.' }]);
+      setGeminiMessages(prev => [...prev, { role: 'model', text: 'Bağlantı hatası oluştu. Lütfen tekrar deneyin.' }]);
     } finally {
       setIsGeminiLoading(false);
     }

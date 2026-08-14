@@ -9,30 +9,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Gemini API Key bulunamadı.' }, { status: 500 });
     }
 
-    // Doğrudan v1beta standart generateContent çağrısı
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
+    // Google API'nin desteklediği olası model isimleri listesi
+    const modelsToTry = [
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-pro'
+    ];
+
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        // v1 ve v1beta sürümlerinin ikisini de kapsayan resmi REST çağrısı
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          const responseText = data.candidates[0].content.parts[0].text;
+          return NextResponse.json({ text: responseText, usedModel: modelName });
+        } else {
+          lastError = data.error?.message || `${modelName} yanıt vermedi.`;
+        }
+      } catch (err: any) {
+        lastError = err.message;
       }
-    );
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error('Gemini API Yanıt Hatası:', data);
-      return NextResponse.json(
-        { error: data.error?.message || 'Gemini API erişim hatası.' },
-        { status: res.status }
-      );
     }
 
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Yanıt üretilemedi.';
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json(
+      { error: `Hiçbir model yanıt vermedi. Son hata: ${lastError}` },
+      { status: 400 }
+    );
 
   } catch (error: any) {
     console.error('Server Route Hatası:', error);

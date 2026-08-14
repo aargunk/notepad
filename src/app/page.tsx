@@ -4,7 +4,8 @@ import {
   Book, Plus, CheckSquare, Calendar as CalendarIcon, 
   Trash2, Edit, ArrowLeft, Settings, RefreshCw, CheckCircle2, 
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
-  ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText
+  ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
+  File, Paperclip, ExternalLink
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,7 +15,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  'Temmuz', 'Ağustos', 'Eylul', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
@@ -100,6 +101,8 @@ export default function Home() {
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [pageTitle, setPageTitle] = useState('');
   const [pageContent, setPageContent] = useState('');
+  const [pageFileUrl, setPageFileUrl] = useState('');
+  const [pageFileType, setPageFileType] = useState('pdf');
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -129,6 +132,8 @@ export default function Home() {
   
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
+  const [newFileUrl, setNewFileUrl] = useState('');
+  const [newFileType, setNewFileType] = useState('pdf');
   const [newDayIndex, setNewDayIndex] = useState(0);
   const [newTime, setNewTime] = useState('09:00');
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
@@ -144,7 +149,7 @@ export default function Home() {
   // GEMINI AI CHATBOT
   const [isGeminiOpen, setIsGeminiOpen] = useState(false);
   const [geminiMessages, setGeminiMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([
-    { role: 'model', text: 'Merhaba! Ben Gemini AI Asistanınız. Açık olan notunuz hakkında sorular sorabilir, metin düzenleme ve özetleme isteyebilirsiniz.' }
+    { role: 'model', text: 'Merhaba! Ben Gemini AI Asistanınız. Açık olan notunuz veya ekli dosyanız hakkında sorular sorabilir, özet isteyebilirsiniz.' }
   ]);
   const [geminiInput, setGeminiInput] = useState('');
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
@@ -325,7 +330,7 @@ export default function Home() {
     try {
       let contextText = '';
       if (openedNotePage) {
-        contextText = `\n\n[ŞU ANDA AÇIK OLAN NOT]\nBaşlık: ${openedNotePage.title}\nİçerik: ${openedNotePage.content}\n\n`;
+        contextText = `\n\n[ŞU ANDA AÇIK OLAN NOT]\nBaşlık: ${openedNotePage.title}\nİçerik: ${openedNotePage.content}\nDosya URL: ${openedNotePage.file_url || 'Yok'}\n\n`;
       }
 
       const fullPrompt = `Sen Notepad Pro uygulamasının akıllı AI asistanısın. Kullanıcıya Türkçe, nazik ve üretken bir şekilde yardımcı ol.${contextText}Kullanıcının sorusu / talebi: ${promptToSend}`;
@@ -463,6 +468,8 @@ export default function Home() {
     setOpenedNotePage(note);
     setPageTitle(note.title);
     setPageContent(note.content);
+    setPageFileUrl(note.file_url || '');
+    setPageFileType(note.file_type || 'pdf');
     setIsInlineEditing(false);
     setIsDrawingMode(false);
   };
@@ -477,12 +484,20 @@ export default function Home() {
       ...openedNotePage,
       title: pageTitle,
       content: pageContent,
+      file_url: pageFileUrl,
+      file_type: pageFileType,
       image_url: drawingData
     };
 
     const { data }: any = await supabase
       .from('notes')
-      .update({ title: pageTitle, content: pageContent, image_url: drawingData })
+      .update({ 
+        title: pageTitle, 
+        content: pageContent, 
+        file_url: pageFileUrl,
+        file_type: pageFileType,
+        image_url: drawingData 
+      })
       .eq('id', openedNotePage.id)
       .select();
 
@@ -628,6 +643,8 @@ export default function Home() {
       page_id: activePageId,
       title: newTitle,
       content: newContent || 'İçerik girilmedi...',
+      file_url: newFileUrl,
+      file_type: newFileType,
       day_index: Number(newDayIndex),
       time: newTime,
       color: newColor,
@@ -661,7 +678,17 @@ export default function Home() {
     setEditingNoteId(null);
     setNewTitle('');
     setNewContent('');
+    setNewFileUrl('');
+    setNewFileType('pdf');
     setIsModalOpen(false);
+  };
+
+  // DOKÜMAN ÖNİZLEME İFRAME URL'Sİ ÜRETİCİ
+  const getEmbedViewerUrl = (url: string, type: string) => {
+    if (!url) return '';
+    if (type === 'pdf') return url;
+    // Word (DOC/DOCX) ve Excel (XLS/XLSX) için Microsoft Office Web Viewer
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
   };
 
   // DEFTER VE SAYFA FİLTRELEME
@@ -815,7 +842,7 @@ export default function Home() {
       <main className="flex-1 p-3 md:p-6 bg-white overflow-y-auto flex flex-col relative w-full">
         
         {openedNotePage ? (
-          /* CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR DEFTER SAYFASI */
+          /* CANLI DÜZENLENEBİLİR & ÇİZİLEBİLİR & DOKÜMAN ÖNİZLEMELİ DEFTER SAYFASI */
           <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full animate-fadeIn">
             <div className="flex items-center justify-between mb-4 pb-2 border-b flex-wrap gap-2">
               <button 
@@ -857,7 +884,7 @@ export default function Home() {
                 ) : (
                   <>
                     <button onClick={() => setIsInlineEditing(true)} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-medium">
-                      <Edit size={14}/> Düzenle / Çiz
+                      <Edit size={14}/> Düzenle / Çiz / Dosya Ekle
                     </button>
                     <button onClick={() => deleteNote(openedNotePage.id)} className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 font-medium">
                       <Trash2 size={14}/> Sil
@@ -866,6 +893,33 @@ export default function Home() {
                 )}
               </div>
             </div>
+
+            {/* DÜZENLEME MODUNDA DOSYA URL DÜZENLEME ALANI */}
+            {isInlineEditing && (
+              <div className="mb-4 p-3.5 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2 text-xs">
+                <p className="font-bold text-teal-900 flex items-center gap-1.5">
+                  <Paperclip size={14} /> Ekli Doküman (PDF, Word, Excel Bağlantısı)
+                </p>
+                <div className="flex gap-2">
+                  <select 
+                    value={pageFileType} 
+                    onChange={(e) => setPageFileType(e.target.value)}
+                    className="border rounded-lg px-2 py-1.5 bg-white text-xs font-semibold"
+                  >
+                    <option value="pdf">PDF Dokümanı</option>
+                    <option value="doc">Word (.doc/docx)</option>
+                    <option value="xls">Excel (.xls/xlsx)</option>
+                  </select>
+                  <input 
+                    type="url" 
+                    value={pageFileUrl} 
+                    onChange={(e) => setPageFileUrl(e.target.value)}
+                    placeholder="https://örnek.com/dosya.pdf veya drive linki..."
+                    className="flex-1 border rounded-lg px-3 py-1.5 bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
 
             <div 
               ref={canvasContainerRef}
@@ -920,18 +974,45 @@ export default function Home() {
                 </div>
               )}
 
-              <div className="flex-1 relative z-10">
+              <div className="flex-1 relative z-10 space-y-6">
                 {isInlineEditing ? (
                   <textarea 
                     value={pageContent}
                     onChange={(e) => setPageContent(e.target.value)}
-                    className="w-full h-full min-h-[250px] bg-transparent font-serif text-base text-gray-800 outline-none resize-none"
+                    className="w-full h-full min-h-[200px] bg-transparent font-serif text-base text-gray-800 outline-none resize-none"
                     style={{ lineHeight: '28px' }}
                     placeholder="Sayfa üzerine yazın..."
                   />
                 ) : (
                   <div className="text-base text-gray-800 whitespace-pre-wrap font-serif pt-2">
                     {openedNotePage.content}
+                  </div>
+                )}
+
+                {/* YÖNTEM 3: DOKÜMAN (PDF, WORD, EXCEL) CANLI ÖNİZLEME PENCERESİ */}
+                {openedNotePage.file_url && !isInlineEditing && (
+                  <div className="mt-6 border border-teal-200 rounded-2xl overflow-hidden bg-white shadow-md">
+                    <div className="bg-teal-900 text-white px-4 py-2.5 flex items-center justify-between text-xs font-semibold">
+                      <div className="flex items-center gap-2">
+                        <File size={16} className="text-teal-300" />
+                        <span>Ekli Doküman Önizlemesi ({openedNotePage.file_type ? openedNotePage.file_type.toUpperCase() : 'PDF'})</span>
+                      </div>
+                      <a 
+                        href={openedNotePage.file_url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center gap-1 text-teal-200 hover:text-white bg-white/10 px-2.5 py-1 rounded-lg transition-colors"
+                      >
+                        Ayrı Sekmede Aç <ExternalLink size={12} />
+                      </a>
+                    </div>
+                    <div className="w-full h-[500px] bg-gray-100">
+                      <iframe 
+                        src={getEmbedViewerUrl(openedNotePage.file_url, openedNotePage.file_type || 'pdf')} 
+                        className="w-full h-full border-none"
+                        title="Doküman Önizleyici"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1003,10 +1084,15 @@ export default function Home() {
                     className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}
                   >
                     <div className="space-y-2 mb-3">
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center flex-wrap gap-1">
                         <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>
                           [{DAY_NAMES[note.day_index || 0]}] [{note.time || '09:00'}]
                         </span>
+                        {note.file_url && (
+                          <span className="text-[10px] bg-teal-800 text-white px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                            <Paperclip size={10} /> {note.file_type ? note.file_type.toUpperCase() : 'PDF'}
+                          </span>
+                        )}
                       </div>
                       
                       <h3 className="font-bold text-sm text-gray-900 group-hover:text-teal-950 transition-colors leading-snug">
@@ -1281,7 +1367,7 @@ export default function Home() {
 
             {userSession && openedNotePage && (
               <div className="px-2 py-1.5 bg-gray-100/80 border-t flex gap-1 overflow-x-auto text-[10px]">
-                <button onClick={() => handleSendGemini("Bu notu 3 kısa maddede özetle.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">📝 Notu Özetle</button>
+                <button onClick={() => handleSendGemini("Bu notu ve ekli dokümanı 3 kısa maddede özetle.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">📝 Notu Özetle</button>
                 <button onClick={() => handleSendGemini("Bu nottaki imla hatalarını düzelt ve üslubu geliştirilmiş versiyonunu öner.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">✍️ Yazımı Düzenle</button>
                 <button onClick={() => handleSendGemini("Bu notun içinden yapılacak işleri listele.")} className="bg-white border hover:bg-teal-50 text-teal-900 px-2 py-1 rounded-md shrink-0 font-medium">📋 Görev Çıkar</button>
               </div>
@@ -1294,7 +1380,7 @@ export default function Home() {
                   value={geminiInput} 
                   onChange={(e) => setGeminiInput(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleSendGemini()}
-                  placeholder={openedNotePage ? "Notunuzla ilgili bir şey sorun..." : "Gemini'ye sorun..."} 
+                  placeholder={openedNotePage ? "Notunuzla veya dokümanla ilgili bir şey sorun..." : "Gemini'ye sorun..."} 
                   className="flex-1 border rounded-xl px-3 py-2 text-xs outline-none bg-gray-50 focus:bg-white focus:border-teal-600 transition-colors"
                 />
                 <button onClick={() => handleSendGemini()} disabled={isGeminiLoading || !geminiInput.trim()} className="bg-teal-900 hover:bg-teal-800 disabled:opacity-40 text-white p-2 rounded-xl transition-all">
@@ -1381,7 +1467,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* YENİ NOT MODALI */}
+      {/* YENİ NOT MODALI (DOSYA EKLENTİ ALANI İLE GÜNCELLENMİŞ) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
@@ -1404,8 +1490,31 @@ export default function Home() {
                   <span className="text-[10px] text-teal-700">🎙️ Sesle Konuşarak Ekle</span>
                 </label>
                 <div className="relative">
-                  <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder="Detaylar..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none h-28 resize-none pr-10" />
+                  <textarea value={newContent} onChange={(e) => setNewContent(e.target.value)} placeholder="Detaylar..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none h-24 resize-none pr-10" />
                   <button type="button" onClick={() => toggleListening('modalContent')} className={`absolute right-2 top-2 p-1.5 rounded-lg border text-xs ${isListening && listeningTarget === 'modalContent' ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-100 text-gray-700'}`}><Mic size={14} /></button>
+                </div>
+              </div>
+
+              {/* DOSYA EKLEME ALANI */}
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Doküman URL'si (PDF / Word / Excel)</label>
+                <div className="flex gap-2">
+                  <select 
+                    value={newFileType} 
+                    onChange={(e) => setNewFileType(e.target.value)} 
+                    className="border rounded-lg px-2 py-1.5 text-xs bg-white font-semibold"
+                  >
+                    <option value="pdf">PDF</option>
+                    <option value="doc">Word</option>
+                    <option value="xls">Excel</option>
+                  </select>
+                  <input 
+                    type="url" 
+                    value={newFileUrl} 
+                    onChange={(e) => setNewFileUrl(e.target.value)} 
+                    placeholder="https://... (Örn: Google Drive public PDF linki)" 
+                    className="flex-1 border rounded-lg px-3 py-1.5 text-xs outline-none" 
+                  />
                 </div>
               </div>
 

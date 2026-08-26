@@ -6,7 +6,7 @@ import {
   ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical,
   ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
   File, Paperclip, ExternalLink, Upload, Loader2, Mail, KeyRound, LogIn, UserPlus,
-  RefreshCw, Check, Search
+  RefreshCw, Check, Search, LogOut
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -111,6 +111,13 @@ export default function Home() {
   const [isTaskType, setIsTaskType] = useState(false);
   // Arama (YENİ)
   const [searchQuery, setSearchQuery] = useState('');
+  // YENİ: Kimlik doğrulama (giriş ekranı)
+  const [session, setSession] = useState<any>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   // Takvim Entegrasyonları
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -131,9 +138,32 @@ export default function Home() {
     { name: 'Mor', card: 'bg-[#f4ecf7] border-[#d7bde2] text-purple-950', badge: 'bg-purple-200 text-purple-900' },
     { name: 'Mavi', card: 'bg-[#ebf5fb] border-[#aed6f1] text-sky-950', badge: 'bg-sky-200 text-sky-900' },
   ];
+  // YENİ: Uygulama açılır açılmaz oturum var mı diye bak, oturum durumu değişince (giriş/çıkış) tekrar kontrol et
   useEffect(() => {
-    fetchData();
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => { listener.subscription.unsubscribe(); };
   }, []);
+  // YENİ: Verileri sadece giriş yapılmışken çek — böylece kapıdan önce hiçbir defter/not indirilmez
+  useEffect(() => {
+    if (session) fetchData();
+  }, [session]);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(''); setIsAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
+    if (error) setAuthError(error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
+    setIsAuthLoading(false);
+  };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setNotebooks([]); setPages([]); setNotes([]); setActivePageId(null); setOpenedNotePage(null); setActiveNotebook('Kişisel');
+  };
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) {
@@ -444,6 +474,41 @@ export default function Home() {
     curr.setDate(curr.getDate() - ((curr.getDay() + 6) % 7) + i);
     return curr;
   });
+  // YENİ: Oturum kontrolü bitene kadar boş/yükleniyor ekranı göster — bu sırada hiçbir defter/not verisi çekilmiyor
+  if (!authChecked) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7]">
+        <Loader2 size={28} className="animate-spin text-teal-800" />
+      </div>
+    );
+  }
+  // YENİ: Giriş yapılmamışsa uygulamanın geri kalanı hiç render edilmiyor — sadece giriş ekranı gösteriliyor
+  if (!session) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7] p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200 p-8 space-y-6">
+          <div className="flex flex-col items-center gap-3">
+            <Logo size={44} showText={true} />
+            <p className="text-xs text-gray-500 flex items-center gap-1.5"><Lock size={12} /> Bu not defteri özel — devam etmek için giriş yapın</p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><Mail size={13} /> E-posta</label>
+              <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><KeyRound size={13} /> Şifre</label>
+              <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
+            </div>
+            {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
+            <button type="submit" disabled={isAuthLoading} className="w-full bg-teal-900 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+              {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} Giriş Yap
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
 
@@ -500,14 +565,18 @@ export default function Home() {
             </div>
           </nav>
         </div>
-        <div className="border-t border-teal-800 pt-3 flex items-center justify-between">
+        <div className="border-t border-teal-800 pt-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 truncate">
             <div className="w-6 h-6 rounded-full bg-teal-800 text-teal-200 flex items-center justify-center font-bold text-[10px] shrink-0">N</div>
             <div className="flex flex-col truncate">
               <span className="text-[10px] font-bold text-white truncate">Notepad PRO</span>
-              <span className="text-[9px] text-teal-300">Sürüm 2.0</span>
+              <span className="text-[9px] text-teal-300 truncate">{session?.user?.email || 'Sürüm 2.0'}</span>
             </div>
           </div>
+          {/* YENİ: Çıkış Yap */}
+          <button onClick={handleLogout} title="Çıkış Yap" className="text-teal-300 hover:text-white hover:bg-white/10 p-1.5 rounded-lg shrink-0 transition-colors">
+            <LogOut size={14} />
+          </button>
         </div>
       </aside>
       {/* 2. ORTA ALAN (TAM EKRAN) */}

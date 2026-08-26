@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''; // YENİ: Google Calendar entegrasyonu için (gizli değil, herkese açık bir Client ID)
 const MONTH_NAMES = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
@@ -109,6 +110,8 @@ export default function Home() {
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
   const [isTaskType, setIsTaskType] = useState(false);
+  const [isEventType, setIsEventType] = useState(false); // YENİ: "Etkinlik" olarak mı açıldı (tarih zorunlu) yoksa sıradan "Not Kartı" olarak mı (tarih isteğe bağlı)
+  const [wantsReminder, setWantsReminder] = useState(false); // YENİ: sıradan not için "takvime hatırlatıcı ekle?" onay kutusu
   // Arama (YENİ)
   const [searchQuery, setSearchQuery] = useState('');
   // YENİ: Kimlik doğrulama (giriş ekranı)
@@ -133,6 +136,10 @@ export default function Home() {
   // Takvim Entegrasyonları
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false); // YENİ: gerçek Google Calendar OAuth bağlantısı
+  const [googleAccessToken, setGoogleAccessToken] = useState('');
+  const [googleTokenClient, setGoogleTokenClient] = useState<any>(null);
+  const [googleGisReady, setGoogleGisReady] = useState(false);
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<any[]>([]);
   // Gemini AI
@@ -250,12 +257,57 @@ export default function Home() {
     const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
     if (nts) setNotes(nts);
   };
+  // YENİ: Google Identity Services script'ini bir kere yükle, hazır olunca token client'ı kur
+  useEffect(() => {
+    if (typeof window === 'undefined' || !GOOGLE_CLIENT_ID) return;
+    if ((window as any).google?.accounts?.oauth2) { setGoogleGisReady(true); return; }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => setGoogleGisReady(true);
+    document.head.appendChild(script);
+  }, []);
+  useEffect(() => {
+    if (!googleGisReady || typeof window === 'undefined' || !GOOGLE_CLIENT_ID) return;
+    const client = (window as any).google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      callback: (response: any) => {
+        if (response?.access_token) {
+          setGoogleAccessToken(response.access_token);
+          setGoogleConnected(true);
+          fetchGoogleCalendarEvents(response.access_token);
+        } else if (response?.error) {
+          alert('Google Calendar bağlantısı kurulamadı: ' + response.error);
+        }
+        setIsSyncing(false);
+      },
+    });
+    setGoogleTokenClient(client);
+  }, [googleGisReady]);
+  const handleConnectGoogle = () => {
+    if (!googleTokenClient) { alert('Google bağlantısı henüz hazırlanıyor, birkaç saniye sonra tekrar deneyin.'); return; }
+    setIsSyncing(true);
+    googleTokenClient.requestAccessToken();
+  };
+  const handleDisconnectGoogle = () => {
+    setGoogleConnected(false); setGoogleAccessToken(''); setGoogleCalendarEvents([]);
+  };
+  // YENİ: Ay/hafta/gün değiştirildiğinde bağlıysa Google etkinliklerini o yeni aralık için tekrar çek
+  useEffect(() => {
+    if (googleConnected && googleAccessToken) fetchGoogleCalendarEvents(googleAccessToken);
+  }, [currentDate, googleConnected]);
   const fetchGoogleCalendarEvents = async (providerToken: string) => {
     setIsSyncing(true);
     try {
       const timeMin = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString();
       const timeMax = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0, 23, 59, 59).toISOString();
       const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&timeMin=${timeMin}&timeMax=${timeMax}`, { headers: { Authorization: `Bearer ${providerToken}` } });
+      if (res.status === 401) { // YENİ: token süresi dolmuş, tekrar bağlanması gerektiğini göster
+        setGoogleConnected(false); setGoogleAccessToken(''); setGoogleCalendarEvents([]);
+        setIsSyncing(false);
+        return;
+      }
       const data = await res.json();
       if (data.items) {
         const events = data.items.map((item: any) => {
@@ -448,10 +500,22 @@ export default function Home() {
   };
   const toggleTaskStatus = async (noteId: string, currentCompletedStatus: boolean, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const { data }: any = await supabase.from('notes').update({ is_completed: !currentCompletedStatus }).eq('id', noteId).select();
+    const { data, error }: any = await supabase.from('notes').update({ is_completed: !currentCompletedStatus }).eq('id', noteId).select();
+    if (error) { alert('Kaydedilemedi: ' + error.message); return; }
     if (data && data.length > 0) {
       setNotes(notes.map(n => n.id === noteId ? data[0] : n));
       if (openedNotePage?.id === noteId) setOpenedNotePage(data[0]);
+    }
+  };
+  // YENİ: notun tek bir satırını "madde madde" tamamlandı/tamamlanmadı olarak işaretler
+  const toggleNoteLine = async (note: any, lineIdx: number) => {
+    const current: number[] = note.completed_lines || [];
+    const updated = current.includes(lineIdx) ? current.filter((i: number) => i !== lineIdx) : [...current, lineIdx];
+    const { data, error }: any = await supabase.from('notes').update({ completed_lines: updated }).eq('id', note.id).select();
+    if (error) { alert('Kaydedilemedi: ' + error.message); return; }
+    if (data && data.length > 0) {
+      setNotes(notes.map(n => n.id === note.id ? data[0] : n));
+      if (openedNotePage?.id === note.id) setOpenedNotePage(data[0]);
     }
   };
   // YENİ: bir notu takvimde göstermeden önce hızlıca gerçek tarih atamak için ("Tarihsiz Notlar" panelinden kullanılıyor)
@@ -470,7 +534,11 @@ export default function Home() {
     if (isSaving) return; // YENİ: kaydet butonuna art arda basılırsa çift kayıt oluşmasını engeller
     setIsSaving(true);
     try {
-      const derivedDayIndex = (new Date(newEventDate + 'T00:00:00').getDay() + 6) % 7; // YENİ: gerçek tarihten otomatik türetiliyor
+      // YENİ: sıradan bir "Not Kartı" için tarih zorunlu değil — sadece Görev/Etkinlik'te veya kullanıcı
+      // "takvime hatırlatıcı ekle?" kutusunu işaretlediyse gerçek bir event_date kaydediliyor.
+      const wantsDate = isTaskType || isEventType || wantsReminder;
+      const finalEventDate = wantsDate ? (newEventDate || null) : null;
+      const derivedDayIndex = finalEventDate ? (new Date(finalEventDate + 'T00:00:00').getDay() + 6) % 7 : null;
       const notePayload = {
         notebook_name: activeNotebook,
         page_id: activePageId,
@@ -478,7 +546,7 @@ export default function Home() {
         content: newContent || 'İçerik girilmedi...',
         file_url: newFileUrl,
         file_type: newFileType,
-        event_date: newEventDate || null, // YENİ: asıl kaynak artık gerçek tarih
+        event_date: finalEventDate,
         day_index: derivedDayIndex,
         time: newTime,
         color: isTaskType ? 'bg-indigo-50 border-indigo-300 text-indigo-950' : newColor,
@@ -505,7 +573,7 @@ export default function Home() {
       await supabase.from('notes').delete().eq('id', id); setNotes(notes.filter(n => n.id !== id)); setOpenedNotePage(null);
     }
   };
-  const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsTaskType(false); setIsModalOpen(false); setNewEventDate(toISODate(new Date())); setNewTime('09:00'); };
+  const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsTaskType(false); setIsEventType(false); setWantsReminder(false); setIsModalOpen(false); setNewEventDate(toISODate(new Date())); setNewTime('09:00'); };
   const getEmbedViewerUrl = (url: string, type: string) => { if (!url) return ''; if (type === 'pdf') return url; return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`; };
   const handleToday = () => setCurrentDate(new Date());
   const handlePrevPeriod = () => {
@@ -537,7 +605,7 @@ export default function Home() {
       })
     : [];
   // YENİ: gerçek tarihi olmayan (eski / göç etmemiş) notlar — takvimde artık gösterilmiyorlar, ayrı bir panelde listeleniyor
-  const undatedNotes = notes.filter(n => !n.event_date);
+  const undatedNotes = notes.filter(n => !n.event_date && n.is_task); // sadece görevler — kasıtlı olarak tarihsiz bırakılan sıradan notlar burada kalabalık yapmasın
   const currentYearVal = currentDate.getFullYear();
   const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
@@ -820,11 +888,10 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    {openedNotePage.is_task && (
-                      <button onClick={(e) => toggleTaskStatus(openedNotePage.id, openedNotePage.is_completed, e)} className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all ${openedNotePage.is_completed ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-400'}`}>
-                        {openedNotePage.is_completed && <Check size={18} />}
-                      </button>
-                    )}
+                    {/* YENİ: artık sadece görevler değil, her not "Tamamlandı" olarak işaretlenebiliyor — tüm içerik üstü çizili olur */}
+                    <button onClick={(e) => toggleTaskStatus(openedNotePage.id, openedNotePage.is_completed, e)} title="Tamamlandı olarak işaretle" className={`w-7 h-7 rounded-lg flex items-center justify-center border transition-all shrink-0 ${openedNotePage.is_completed ? 'bg-teal-700 text-white border-teal-700' : 'bg-white border-gray-400 hover:border-teal-500'}`}>
+                      {openedNotePage.is_completed && <Check size={18} />}
+                    </button>
                     <h1 className={`text-2xl md:text-3xl font-bold tracking-tight font-serif ${openedNotePage.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{openedNotePage.title}</h1>
                   </div>
                 )}
@@ -836,8 +903,25 @@ export default function Home() {
               <div className="flex-1 relative z-10 space-y-6">
                 {isInlineEditing ? (
                   <textarea value={pageContent} onChange={(e) => setPageContent(e.target.value)} className="w-full h-full min-h-[200px] bg-transparent font-serif text-base text-gray-800 outline-none resize-none" style={{ lineHeight: '28px' }} placeholder="Sayfa üzerine yazın..." />
+                ) : openedNotePage.is_completed ? (
+                  // YENİ: not tamamlandı olarak işaretlendiyse tüm içerik üstü çizili gösterilir
+                  <div className="text-base text-gray-400 whitespace-pre-wrap font-serif pt-2 line-through">{openedNotePage.content}</div>
                 ) : (
-                  <div className="text-base text-gray-800 whitespace-pre-wrap font-serif pt-2">{openedNotePage.content}</div>
+                  // YENİ: tamamlanmamış notlarda her satır kendi başına işaretlenebilir ("madde madde" tamamlama)
+                  <div className="text-base text-gray-800 font-serif pt-2">
+                    {(openedNotePage.content || '').split('\n').map((line: string, idx: number) => {
+                      if (!line.trim()) return <div key={idx} className="h-3" />;
+                      const isLineDone = (openedNotePage.completed_lines || []).includes(idx);
+                      return (
+                        <div key={idx} onClick={() => toggleNoteLine(openedNotePage, idx)} className="flex items-start gap-2 cursor-pointer group/line hover:bg-black/[0.03] rounded px-1 -mx-1 py-0.5">
+                          <span className={`mt-1 w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-colors ${isLineDone ? 'bg-teal-600 border-teal-600' : 'border-gray-300 group-hover/line:border-teal-400'}`}>
+                            {isLineDone && <Check size={10} className="text-white" />}
+                          </span>
+                          <span className={isLineDone ? 'line-through text-gray-400' : ''}>{line}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
                 {openedNotePage.file_url && !isInlineEditing && (
                   <div className="mt-6 border border-teal-200 rounded-2xl overflow-hidden bg-white shadow-md">
@@ -863,8 +947,8 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setIsPageModalOpen(true)} className="bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all"><Plus size={15} /> Yeni Sayfa</button>
-                <button onClick={() => { resetForm(); setIsTaskType(false); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><Plus size={16} /> Yeni Not Kartı</button>
-                <button onClick={() => { resetForm(); setIsTaskType(true); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><CheckSquare size={15} /> Yeni Görev Ekle</button>
+                <button onClick={() => { resetForm(); setIsTaskType(false); setIsEventType(false); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><Plus size={16} /> Yeni Not Kartı</button>
+                <button onClick={() => { resetForm(); setIsTaskType(true); setIsEventType(false); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><CheckSquare size={15} /> Yeni Görev Ekle</button>
               </div>
             </header>
             {/* YENİ: Tüm defterler genelinde arama */}
@@ -895,10 +979,15 @@ export default function Home() {
                         <div className="space-y-2 mb-3">
                           <div className="flex justify-between items-center flex-wrap gap-1">
                             <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>{formatNoteBadge(note)}</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-black/10 font-semibold text-gray-700">{note.notebook_name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-black/10 font-semibold text-gray-700">{note.notebook_name}</span>
+                              <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} title="Tamamlandı olarak işaretle" className={`w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0 ${note.is_completed ? 'bg-teal-700 text-white border-teal-700' : 'bg-white border-gray-400 hover:border-teal-500'}`}>
+                                {note.is_completed && <Check size={14} />}
+                              </button>
+                            </div>
                           </div>
                           <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
-                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                          <p className={`text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : ''}`}>{note.content}</p>
                         </div>
                         <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
                           <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
@@ -934,14 +1023,12 @@ export default function Home() {
                             <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>
                               {formatNoteBadge(note)}
                             </span>
-                            {note.is_task && (
-                              <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${note.is_completed ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-400 hover:border-indigo-600'}`}>
-                                {note.is_completed && <Check size={14} />}
-                              </button>
-                            )}
+                            <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0 ${note.is_completed ? 'bg-teal-700 text-white border-teal-700' : 'bg-white border-gray-400 hover:border-teal-700'}`}>
+                              {note.is_completed && <Check size={14} />}
+                            </button>
                           </div>
                           <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
-                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                          <p className={`text-xs leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.content}</p>
                         </div>
                         <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
                           <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
@@ -976,8 +1063,8 @@ export default function Home() {
                 <button onClick={() => setIsCalendarSettingsOpen(true)} className="border border-gray-300 hover:bg-gray-50 text-gray-700 p-2 rounded-xl text-xs font-medium shadow-2xs relative">
                   <Settings size={16} />
                 </button>
-                <button onClick={() => { resetForm(); setIsTaskType(false); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><Plus size={16} /> Etkinlik</button>
-                <button onClick={() => { resetForm(); setIsTaskType(true); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><CheckSquare size={15} /> Görev</button>
+                <button onClick={() => { resetForm(); setIsTaskType(false); setIsEventType(true); setIsModalOpen(true); }} className="bg-teal-900 hover:bg-teal-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><Plus size={16} /> Etkinlik</button>
+                <button onClick={() => { resetForm(); setIsTaskType(true); setIsEventType(false); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><CheckSquare size={15} /> Görev</button>
               </div>
             </header>
             <div className="flex-1 overflow-auto">
@@ -996,14 +1083,12 @@ export default function Home() {
                             {matchedNotes.map(note => (
                               <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-100'} p-2.5 rounded-xl border text-xs font-medium cursor-pointer shadow-2xs hover:shadow-xs flex justify-between items-center`}>
                                 <div className="flex items-center gap-2">
-                                  {note.is_task && (
-                                    <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-4 h-4 rounded flex items-center justify-center border ${note.is_completed ? 'bg-indigo-600 text-white' : 'bg-white border-gray-400'}`}>
-                                      {note.is_completed && <Check size={12} />}
-                                    </button>
-                                  )}
+                                  <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${note.is_completed ? 'bg-teal-700 text-white border-teal-700' : 'bg-white border-gray-400'}`}>
+                                    {note.is_completed && <Check size={12} />}
+                                  </button>
                                   <div>
                                     <p className={`font-bold ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{note.title}</p>
-                                    <p className="text-[11px] text-gray-700 line-clamp-1">{note.content}</p>
+                                    <p className={`text-[11px] line-clamp-1 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.content}</p>
                                   </div>
                                 </div>
                                 <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${note.is_task ? 'bg-indigo-200 text-indigo-900' : 'bg-white/60'}`}>{note.is_task ? 'GÖREV' : 'NOT'}</span>
@@ -1176,12 +1261,24 @@ export default function Home() {
             <div className="flex justify-between items-center border-b pb-3"><h3 className="font-bold text-base text-gray-900 flex items-center gap-2"><Settings size={18} className="text-teal-900" /> Takvim Entegrasyonları</h3><button onClick={() => setIsCalendarSettingsOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button></div>
             <div className="space-y-3">
               <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
-                <div className="flex items-center gap-2.5"><span className="text-xl">🌐</span><div><p className="font-bold text-xs text-gray-900">Google Calendar</p><p className="text-[10px] text-gray-500">Google Etkinlik Senkronizasyonu</p></div></div>
-                <button disabled={isSyncing} className="text-xs bg-white hover:bg-gray-100 border text-gray-800 font-semibold px-3 py-1.5 rounded-lg shadow-2xs">Bağlan</button>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🌐</span>
+                  <div>
+                    <p className="font-bold text-xs text-gray-900">Google Calendar</p>
+                    <p className="text-[10px] text-gray-500">{googleConnected ? 'Bağlı — etkinlikler senkronize ediliyor' : !GOOGLE_CLIENT_ID ? 'Henüz kurulmadı (Client ID eksik)' : 'Google Etkinlik Senkronizasyonu'}</p>
+                  </div>
+                </div>
+                {googleConnected ? (
+                  <button onClick={handleDisconnectGoogle} className="text-xs bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold px-3 py-1.5 rounded-lg shadow-2xs">Bağlantıyı Kes</button>
+                ) : (
+                  <button onClick={handleConnectGoogle} disabled={isSyncing || !GOOGLE_CLIENT_ID} className="text-xs bg-white hover:bg-gray-100 border text-gray-800 font-semibold px-3 py-1.5 rounded-lg shadow-2xs disabled:opacity-40 flex items-center gap-1.5">
+                    {isSyncing ? <Loader2 size={13} className="animate-spin" /> : null} Bağlan
+                  </button>
+                )}
               </div>
-              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between">
-                <div className="flex items-center gap-2.5"><span className="text-xl">📫</span><div><p className="font-bold text-xs text-gray-900">Outlook Takvim</p><p className="text-[10px] text-gray-500">Microsoft Graph API Senkronizasyonu</p></div></div>
-                <button disabled={isSyncing} className="text-xs bg-blue-700 hover:bg-blue-800 text-white font-semibold px-3 py-1.5 rounded-lg shadow-2xs">Bağlan</button>
+              <div className="p-3.5 border rounded-xl bg-gray-50/80 flex items-center justify-between opacity-60">
+                <div className="flex items-center gap-2.5"><span className="text-xl">📫</span><div><p className="font-bold text-xs text-gray-900">Outlook Takvim</p><p className="text-[10px] text-gray-500">Yakında</p></div></div>
+                <button disabled className="text-xs bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg shadow-2xs opacity-50 cursor-not-allowed">Bağlan</button>
               </div>
             </div>
             <div className="flex justify-end pt-2"><button onClick={() => setIsCalendarSettingsOpen(false)} className="px-4 py-2 bg-teal-900 text-white rounded-lg text-xs font-medium hover:bg-teal-800">Tamam</button></div>
@@ -1191,7 +1288,7 @@ export default function Home() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
-            <h3 className="font-bold text-base text-gray-900">{isTaskType ? 'Yeni Görev Ekle' : 'Yeni Not / Etkinlik Ekle'}</h3>
+            <h3 className="font-bold text-base text-gray-900">{isTaskType ? 'Yeni Görev Ekle' : isEventType ? 'Yeni Etkinlik Ekle' : 'Yeni Not Kartı'}</h3>
             <form onSubmit={saveNote} className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 flex justify-between items-center mb-1"><span>Başlık</span><span className="text-[10px] text-teal-700">🎙️ Sesle Söyle</span></label>
@@ -1225,13 +1322,32 @@ export default function Home() {
                   {newFileUrl && <p className="text-[10px] text-emerald-700 bg-emerald-50 p-1.5 rounded border border-emerald-200 truncate">✓ Yüklendi: {newFileUrl}</p>}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Tarih</label>
-                  <input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white" required />
+              {(isTaskType || isEventType) ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">Tarih</label>
+                    <input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white" required />
+                  </div>
+                  <div><label className="text-xs text-gray-500 block mb-1">Saat</label><select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
                 </div>
-                <div><label className="text-xs text-gray-500 block mb-1">Saat</label><select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
-              </div>
+              ) : (
+                // YENİ: sıradan bir not eklemek onu otomatik olarak bir "etkinlik" yapmasın — takvime eklemek isteğe bağlı
+                <div className="border-t pt-3 space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                    <input type="checkbox" checked={wantsReminder} onChange={(e) => setWantsReminder(e.target.checked)} className="w-4 h-4 rounded border-gray-400" />
+                    📅 Takvime hatırlatıcı ekle?
+                  </label>
+                  {wantsReminder && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Tarih</label>
+                        <input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white" required />
+                      </div>
+                      <div><label className="text-xs text-gray-500 block mb-1">Saat</label><select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={resetForm} className="px-3 py-1.5 border rounded-lg text-xs text-gray-600">İptal</button>
                 <button type="submit" disabled={isUploading || isSaving} className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs font-bold disabled:opacity-50">{isSaving ? 'Kaydediliyor...' : (isEditMode ? 'Güncelle' : 'Kaydet')}</button>

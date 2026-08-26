@@ -34,6 +34,17 @@ function formatNoteBadge(note: any) {
   const monthShort = MONTH_NAMES[d.getMonth()].slice(0, 3);
   return `${d.getDate()} ${monthShort} ${dayName} • ${note.time || '09:00'}`;
 }
+// YENİ: kart önizlemelerinde (ana ekran, arama, gün görünümü) içeriği satır satır gösterir; "madde madde"
+// tamamlanmış satırlar burada da üstü çizili görünsün diye not detay sayfasındaki mantığın aynısını kullanır.
+function renderNotePreview(note: any) {
+  const completedLines: number[] = note.completed_lines || [];
+  return (note.content || '').split('\n').map((line: string, idx: number) => (
+    <span key={idx} className={completedLines.includes(idx) ? 'line-through text-gray-400' : ''}>
+      {line}
+      <br />
+    </span>
+  ));
+}
 function Logo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 select-none cursor-pointer group">
@@ -987,7 +998,7 @@ export default function Home() {
                             </div>
                           </div>
                           <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
-                          <p className={`text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : ''}`}>{note.content}</p>
+                          <p className={`text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : ''}`}>{note.is_completed ? note.content : renderNotePreview(note)}</p>
                         </div>
                         <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
                           <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
@@ -1028,7 +1039,7 @@ export default function Home() {
                             </button>
                           </div>
                           <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
-                          <p className={`text-xs leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.content}</p>
+                          <p className={`text-xs leading-relaxed whitespace-pre-wrap line-clamp-4 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.is_completed ? note.content : renderNotePreview(note)}</p>
                         </div>
                         <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
                           <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
@@ -1088,7 +1099,7 @@ export default function Home() {
                                   </button>
                                   <div>
                                     <p className={`font-bold ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{note.title}</p>
-                                    <p className={`text-[11px] line-clamp-1 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.content}</p>
+                                    <p className={`text-[11px] line-clamp-1 ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>{note.is_completed ? note.content : renderNotePreview(note)}</p>
                                   </div>
                                 </div>
                                 <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${note.is_task ? 'bg-indigo-200 text-indigo-900' : 'bg-white/60'}`}>{note.is_task ? 'GÖREV' : 'NOT'}</span>

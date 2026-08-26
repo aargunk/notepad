@@ -1,25 +1,38 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Book, Plus, CheckSquare, Calendar as CalendarIcon, 
-  Trash2, Edit, ArrowLeft, Settings, CheckCircle2, 
-  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical, 
+import {
+  Book, Plus, CheckSquare, Calendar as CalendarIcon,
+  Trash2, Edit, ArrowLeft, Settings, CheckCircle2,
+  ShieldAlert, Save, PenTool, Eraser, Mic, MicOff, GripVertical,
   ChevronLeft, ChevronRight, Menu, X, Sparkles, Send, Bot, User, Lock, FileText,
   File, Paperclip, ExternalLink, Upload, Loader2, Mail, KeyRound, LogIn, UserPlus,
-  RefreshCw, Check
+  RefreshCw, Check, Search
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 const MONTH_NAMES = [
-  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-
+// YENİ: Bir Date nesnesini yerel saat dilimine göre 'YYYY-MM-DD' string'ine çevirir.
+// (toISOString() UTC kullandığı için gece yarısına yakın saatlerde bir gün kayabiliyordu, bu yüzden elle kuruyoruz.)
+function toISODate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+// YENİ: Bir notun takvim rozetinde gösterilecek metni üretir. Gerçek tarih yoksa "Tarihsiz" der.
+function formatNoteBadge(note: any) {
+  if (!note.event_date) return 'Tarihsiz';
+  const d = new Date(note.event_date + 'T00:00:00');
+  const dayName = DAY_NAMES[(d.getDay() + 6) % 7];
+  const monthShort = MONTH_NAMES[d.getMonth()].slice(0, 3);
+  return `${d.getDate()} ${monthShort} ${dayName} • ${note.time || '09:00'}`;
+}
 function Logo({ size = 32, showText = true }: { size?: number; showText?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 select-none cursor-pointer group">
@@ -49,45 +62,39 @@ function Logo({ size = 32, showText = true }: { size?: number; showText?: boolea
     </div>
   );
 }
-
 export default function Home() {
   const [notebooks, setNotebooks] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [activeNotebook, setActiveNotebook] = useState('Kişisel');
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
-
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarMode, setCalendarMode] = useState<'day' | 'week' | 'month'>('month');
   const [openedNotePage, setOpenedNotePage] = useState<any>(null);
-
   // Düzenleme / Çizim State'leri
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [pageTitle, setPageTitle] = useState('');
   const [pageContent, setPageContent] = useState('');
   const [pageFileUrl, setPageFileUrl] = useState('');
   const [pageFileType, setPageFileType] = useState('pdf');
+  const [pageEventDate, setPageEventDate] = useState(''); // YENİ: notu açıp düzenlerken gerçek tarihi değiştirebilmek için
+  const [pageTime, setPageTime] = useState('09:00'); // YENİ
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const isDrawing = useRef(false);
   const draggedNotebookIndex = useRef<number | null>(null);
-
   // Sesle Yazma
   const [isListening, setIsListening] = useState(false);
   const [listeningTarget, setListeningTarget] = useState<'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent' | null>(null);
   const recognitionRef = useRef<any>(null);
-
   // Modallar
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
   const [newNotebookName, setNewNotebookName] = useState('');
   const [isPageModalOpen, setIsPageModalOpen] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState('');
-
   const [notes, setNotes] = useState<any[]>([]);
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -96,18 +103,19 @@ export default function Home() {
   const [newFileUrl, setNewFileUrl] = useState('');
   const [newFileType, setNewFileType] = useState('pdf');
   const [isUploading, setIsUploading] = useState(false);
-  const [newDayIndex, setNewDayIndex] = useState(0);
+  const [isSaving, setIsSaving] = useState(false); // YENİ: çift kayıt hatasını önlemek için
+  const [newEventDate, setNewEventDate] = useState(() => toISODate(new Date())); // YENİ: gerçek tarih (haftanın günü yerine)
   const [newTime, setNewTime] = useState('09:00');
   const [newColor, setNewColor] = useState('bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950');
   const [newBadge, setNewBadge] = useState('bg-emerald-200 text-emerald-900');
   const [isTaskType, setIsTaskType] = useState(false);
-
+  // Arama (YENİ)
+  const [searchQuery, setSearchQuery] = useState('');
   // Takvim Entegrasyonları
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<any[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<any[]>([]);
-
   // Gemini AI
   const [isGeminiOpen, setIsGeminiOpen] = useState(false);
   const [geminiMessages, setGeminiMessages] = useState<{ role: 'user' | 'model'; text: string }[]>([
@@ -116,7 +124,6 @@ export default function Home() {
   const [geminiInput, setGeminiInput] = useState('');
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
-
   const hours = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
   const colorOptions = [
     { name: 'Yeşil', card: 'bg-[#e2f0d9] border-[#c5e1a5] text-emerald-950', badge: 'bg-emerald-200 text-emerald-900' },
@@ -124,11 +131,9 @@ export default function Home() {
     { name: 'Mor', card: 'bg-[#f4ecf7] border-[#d7bde2] text-purple-950', badge: 'bg-purple-200 text-purple-900' },
     { name: 'Mavi', card: 'bg-[#ebf5fb] border-[#aed6f1] text-sky-950', badge: 'bg-sky-200 text-sky-900' },
   ];
-
   useEffect(() => {
     fetchData();
   }, []);
-
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) {
@@ -142,7 +147,6 @@ export default function Home() {
     const { data: nts } = await supabase.from('notes').select('*').order('created_at', { ascending: true });
     if (nts) setNotes(nts);
   };
-
   const fetchGoogleCalendarEvents = async (providerToken: string) => {
     setIsSyncing(true);
     try {
@@ -164,7 +168,6 @@ export default function Home() {
       }
     } catch (err) { console.error("GCal Error:", err); } finally { setIsSyncing(false); }
   };
-
   const fetchOutlookCalendarEvents = async (providerToken: string) => {
     setIsSyncing(true);
     try {
@@ -186,7 +189,6 @@ export default function Home() {
       }
     } catch (err) { console.error("Outlook Error:", err); } finally { setIsSyncing(false); }
   };
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, target: 'modal' | 'inline') => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -204,7 +206,6 @@ export default function Home() {
       else { setPageFileUrl(publicUrlData.publicUrl); setPageFileType(detectedType); }
     } catch (err: any) { alert("Dosya yüklenemedi."); } finally { setIsUploading(false); }
   };
-
   const handleSendGemini = async (overridePrompt?: string) => {
     const promptToSend = overridePrompt || geminiInput;
     if (!promptToSend.trim() || isGeminiLoading) return;
@@ -221,7 +222,6 @@ export default function Home() {
       setGeminiMessages(prev => [...prev, { role: 'model', text: data.text || 'Hata' }]);
     } catch (err) { setGeminiMessages(prev => [...prev, { role: 'model', text: 'Hata oluştu.' }]); } finally { setIsGeminiLoading(false); }
   };
-
   const handleDragStart = (index: number) => { draggedNotebookIndex.current = index; };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
   const handleDrop = (dropIndex: number) => {
@@ -232,7 +232,6 @@ export default function Home() {
     setNotebooks(reordered);
     draggedNotebookIndex.current = null;
   };
-
   useEffect(() => { if (chatBottomRef.current) chatBottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [geminiMessages]);
   useEffect(() => {
     if (isInlineEditing && canvasRef.current && canvasContainerRef.current) {
@@ -246,7 +245,6 @@ export default function Home() {
       }
     }
   }, [isInlineEditing, isDrawingMode, openedNotePage]);
-
   const toggleListening = (target: 'modalTitle' | 'modalContent' | 'pageTitle' | 'pageContent') => {
     if (typeof window === 'undefined') return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -270,24 +268,24 @@ export default function Home() {
     recognitionRef.current = recognition;
     recognition.start();
   };
-
   const handleOpenPage = (note: any) => {
     setOpenedNotePage(note); setPageTitle(note.title); setPageContent(note.content);
     setPageFileUrl(note.file_url || ''); setPageFileType(note.file_type || 'pdf');
+    setPageEventDate(note.event_date || ''); setPageTime(note.time || '09:00'); // YENİ
     setIsInlineEditing(false); setIsDrawingMode(false);
   };
-
   const handleSaveInline = async () => {
     if (!openedNotePage) return;
     let drawingData = openedNotePage.image_url;
     if (canvasRef.current) drawingData = canvasRef.current.toDataURL();
-    const { data }: any = await supabase.from('notes').update({ title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData }).eq('id', openedNotePage.id).select();
+    // YENİ: gerçek tarihi de güncelle, day_index'i tarihten otomatik türet (geriye dönük uyumluluk için)
+    const derivedDayIndex = pageEventDate ? (new Date(pageEventDate + 'T00:00:00').getDay() + 6) % 7 : openedNotePage.day_index;
+    const { data }: any = await supabase.from('notes').update({ title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData, event_date: pageEventDate || null, time: pageTime, day_index: derivedDayIndex }).eq('id', openedNotePage.id).select();
     if (data && data.length > 0) {
       setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n)); setOpenedNotePage(data[0]);
     }
     setIsInlineEditing(false); setIsDrawingMode(false);
   };
-
   const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -296,14 +294,12 @@ export default function Home() {
     let clientY = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
     return { x: clientX - rect.left, y: clientY - rect.top };
   };
-
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode) return;
     isDrawing.current = true;
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx) { const { x, y } = getCoordinates(e); ctx.beginPath(); ctx.moveTo(x, y); }
   };
-
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing.current || !isDrawingMode) return;
     const ctx = canvasRef.current?.getContext('2d');
@@ -312,10 +308,8 @@ export default function Home() {
       ctx.lineTo(x, y); ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
     }
   };
-
   const stopDrawing = () => { isDrawing.current = false; };
   const clearCanvas = () => { if (canvasRef.current) canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
-
   const addNotebook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNotebookName.trim()) return;
@@ -323,7 +317,6 @@ export default function Home() {
     if (data && data.length > 0) { setNotebooks([...notebooks, data[0]]); setActiveNotebook(data[0].name); }
     setNewNotebookName(''); setIsNotebookModalOpen(false);
   };
-
   const addPage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPageTitle.trim()) return;
@@ -331,7 +324,6 @@ export default function Home() {
     if (data && data.length > 0) { setPages([...pages, data[0]]); setActivePageId(data[0].id); }
     setNewPageTitle(''); setIsPageModalOpen(false);
   };
-
   const deletePage = async (pageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Bu sayfayı silmek istediğinize emin misiniz?")) {
@@ -340,7 +332,6 @@ export default function Home() {
       if (activePageId === pageId) setActivePageId(null);
     }
   };
-
   const deleteNotebook = async (nbName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (notebooks.length <= 1) { alert('En az bir defter kalmalıdır!'); return; }
@@ -351,7 +342,6 @@ export default function Home() {
       if (activeNotebook === nbName) setActiveNotebook(remainingNotebooks[0].name);
     }
   };
-
   const toggleTaskStatus = async (noteId: string, currentCompletedStatus: boolean, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const { data }: any = await supabase.from('notes').update({ is_completed: !currentCompletedStatus }).eq('id', noteId).select();
@@ -360,44 +350,56 @@ export default function Home() {
       if (openedNotePage?.id === noteId) setOpenedNotePage(data[0]);
     }
   };
-
+  // YENİ: bir notu takvimde göstermeden önce hızlıca gerçek tarih atamak için ("Tarihsiz Notlar" panelinden kullanılıyor)
+  const assignEventDate = async (noteId: string, dateStr: string) => {
+    if (!dateStr) return;
+    const dayIdx = (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7;
+    const { data }: any = await supabase.from('notes').update({ event_date: dateStr, day_index: dayIdx }).eq('id', noteId).select();
+    if (data && data.length > 0) {
+      setNotes(notes.map(n => n.id === noteId ? data[0] : n));
+    }
+  };
   const saveNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    const notePayload = { 
-      notebook_name: activeNotebook, 
-      page_id: activePageId, 
-      title: newTitle, 
-      content: newContent || 'İçerik girilmedi...', 
-      file_url: newFileUrl, 
-      file_type: newFileType, 
-      day_index: Number(newDayIndex), 
-      time: newTime, 
-      color: isTaskType ? 'bg-indigo-50 border-indigo-300 text-indigo-950' : newColor, 
-      badge_color: isTaskType ? 'bg-indigo-200 text-indigo-900' : newBadge,
-      is_task: isTaskType,
-      is_completed: false
-    };
-
-    if (isEditMode && editingNoteId) {
-      const { data }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
-      if (data && data.length > 0) { setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n)); if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]); }
-    } else {
-      const { data }: any = await supabase.from('notes').insert([notePayload]).select();
-      if (data && data.length > 0) setNotes([...notes, data[0]]);
+    if (isSaving) return; // YENİ: kaydet butonuna art arda basılırsa çift kayıt oluşmasını engeller
+    setIsSaving(true);
+    try {
+      const derivedDayIndex = (new Date(newEventDate + 'T00:00:00').getDay() + 6) % 7; // YENİ: gerçek tarihten otomatik türetiliyor
+      const notePayload = {
+        notebook_name: activeNotebook,
+        page_id: activePageId,
+        title: newTitle,
+        content: newContent || 'İçerik girilmedi...',
+        file_url: newFileUrl,
+        file_type: newFileType,
+        event_date: newEventDate || null, // YENİ: asıl kaynak artık gerçek tarih
+        day_index: derivedDayIndex,
+        time: newTime,
+        color: isTaskType ? 'bg-indigo-50 border-indigo-300 text-indigo-950' : newColor,
+        badge_color: isTaskType ? 'bg-indigo-200 text-indigo-900' : newBadge,
+        is_task: isTaskType,
+        is_completed: false
+      };
+      if (isEditMode && editingNoteId) {
+        const { data }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
+        if (data && data.length > 0) { setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n)); if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]); }
+      } else {
+        const { data }: any = await supabase.from('notes').insert([notePayload]).select();
+        if (data && data.length > 0) setNotes([...notes, data[0]]);
+      }
+      resetForm();
+    } finally {
+      setIsSaving(false);
     }
-    resetForm();
   };
-
   const deleteNote = async (id: string) => {
     if(confirm("Silmek istediğinize emin misiniz?")) {
       await supabase.from('notes').delete().eq('id', id); setNotes(notes.filter(n => n.id !== id)); setOpenedNotePage(null);
     }
   };
-
-  const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsTaskType(false); setIsModalOpen(false); };
+  const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsTaskType(false); setIsModalOpen(false); setNewEventDate(toISODate(new Date())); setNewTime('09:00'); };
   const getEmbedViewerUrl = (url: string, type: string) => { if (!url) return ''; if (type === 'pdf') return url; return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`; };
-
   const handleToday = () => setCurrentDate(new Date());
   const handlePrevPeriod = () => {
     const next = new Date(currentDate);
@@ -413,14 +415,22 @@ export default function Home() {
     else next.setMonth(next.getMonth() + 1);
     setCurrentDate(next);
   };
-
   const notebookPages = pages.filter(p => p.notebook_name === activeNotebook);
   const filteredNotes = notes.filter(n => {
     if (n.notebook_name !== activeNotebook) return false;
     if (activePageId) return n.page_id === activePageId;
     return true;
   });
-
+  // YENİ: arama — tüm defterler genelinde başlık/içerik arar (Türkçe karakterlere duyarlı küçük harfe çevirme)
+  const isSearching = searchQuery.trim().length > 0;
+  const searchResults = isSearching
+    ? notes.filter(n => {
+        const q = searchQuery.toLocaleLowerCase('tr-TR');
+        return (n.title || '').toLocaleLowerCase('tr-TR').includes(q) || (n.content || '').toLocaleLowerCase('tr-TR').includes(q);
+      })
+    : [];
+  // YENİ: gerçek tarihi olmayan (eski / göç etmemiş) notlar — takvimde artık gösterilmiyorlar, ayrı bir panelde listeleniyor
+  const undatedNotes = notes.filter(n => !n.event_date);
   const currentYearVal = currentDate.getFullYear();
   const currentMonthVal = currentDate.getMonth();
   const daysInMonth = new Date(currentYearVal, currentMonthVal + 1, 0).getDate();
@@ -430,17 +440,15 @@ export default function Home() {
     curr.setDate(curr.getDate() - ((curr.getDay() + 6) % 7) + i);
     return curr;
   });
-
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#f4f5f7] text-gray-800 font-sans relative overflow-hidden">
-      
+
       {/* MOBİL ÜST BAR */}
       <div className="md:hidden bg-teal-900 text-white px-4 py-3 flex items-center justify-between z-20 shadow-md">
         <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-1 rounded-lg hover:bg-white/10"><Menu size={22} /></button>
         <Logo size={28} showText={true} />
         <div className="w-5" />
       </div>
-
       {/* 1. SOL KENAR ÇUBUĞU */}
       <aside className={`fixed md:relative inset-y-0 left-0 w-64 md:w-56 bg-teal-900 text-white p-4 flex flex-col justify-between shadow-xl md:shadow-md z-30 transition-transform duration-300 select-none ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div>
@@ -448,7 +456,6 @@ export default function Home() {
             <Logo size={34} showText={true} />
             <button onClick={() => setIsMobileSidebarOpen(false)} className="md:hidden text-teal-200 hover:text-white"><X size={20} /></button>
           </div>
-
           <nav className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
@@ -457,7 +464,7 @@ export default function Home() {
               </div>
               {notebooks.map((nb, index) => (
                 <div key={nb.id} className="space-y-1">
-                  <div 
+                  <div
                     draggable onDragStart={() => handleDragStart(index)} onDragOver={handleDragOver} onDrop={() => handleDrop(index)}
                     onClick={() => { setActiveNotebook(nb.name); setActivePageId(null); setActiveView('notes'); setOpenedNotePage(null); setIsInlineEditing(false); setIsDrawingMode(false); setIsMobileSidebarOpen(false); }}
                     className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing text-xs transition-all group ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white shadow-xs' : 'hover:bg-white/10 text-teal-100'}`}
@@ -481,7 +488,6 @@ export default function Home() {
                 </div>
               ))}
             </div>
-
             <div className="space-y-2 pt-3 border-t border-teal-800">
               <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1">Plan</p>
               <div onClick={() => { setActiveView('calendar'); setOpenedNotePage(null); setIsMobileSidebarOpen(false); }} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${activeView === 'calendar' && !openedNotePage ? 'bg-white/20 font-medium text-white' : 'hover:bg-white/5 text-teal-100'}`}>
@@ -490,7 +496,6 @@ export default function Home() {
             </div>
           </nav>
         </div>
-
         <div className="border-t border-teal-800 pt-3 flex items-center justify-between">
           <div className="flex items-center gap-2 truncate">
             <div className="w-6 h-6 rounded-full bg-teal-800 text-teal-200 flex items-center justify-center font-bold text-[10px] shrink-0">N</div>
@@ -501,7 +506,6 @@ export default function Home() {
           </div>
         </div>
       </aside>
-
       {/* 2. ORTA ALAN (TAM EKRAN) */}
       <main className="flex-1 p-3 md:p-6 bg-white overflow-y-auto flex flex-col relative w-full">
         {openedNotePage ? (
@@ -511,7 +515,6 @@ export default function Home() {
               <button onClick={() => setOpenedNotePage(null)} className="flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors">
                 <ArrowLeft size={16} /> Geri Dön
               </button>
-
               <div className="flex items-center gap-2 flex-wrap">
                 {isInlineEditing ? (
                   <>
@@ -533,7 +536,6 @@ export default function Home() {
                 )}
               </div>
             </div>
-
             {isInlineEditing && (
               <div className="mb-4 p-3.5 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2 text-xs">
                 <p className="font-bold text-teal-900 flex items-center gap-1.5"><Paperclip size={14} /> Ekli Doküman (PDF, Word, Excel)</p>
@@ -547,8 +549,17 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            <div 
+            {isInlineEditing && (
+              <div className="mb-4 p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2 text-xs">
+                <p className="font-bold text-amber-900 flex items-center gap-1.5"><CalendarIcon size={14} /> Tarih & Saat (takvimde bu notun görüneceği gün)</p>
+                <div className="flex gap-2 items-center flex-wrap">
+                  <input type="date" value={pageEventDate} onChange={(e) => setPageEventDate(e.target.value)} className="border rounded-lg px-3 py-1.5 bg-white outline-none" />
+                  <select value={pageTime} onChange={(e) => setPageTime(e.target.value)} className="border rounded-lg px-3 py-1.5 bg-white outline-none">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select>
+                  {!pageEventDate && <span className="text-amber-700">Tarih atanmazsa bu not takvimde görünmez.</span>}
+                </div>
+              </div>
+            )}
+            <div
               ref={canvasContainerRef} className="flex-1 bg-[#fefdf0] border border-[#f0e68c] rounded-2xl p-4 md:p-8 shadow-inner relative overflow-y-auto flex flex-col min-h-[450px]"
               style={{ backgroundImage: 'repeating-linear-gradient(white, white 27px, #e8f0fe 28px)', lineHeight: '28px' }}
             >
@@ -571,7 +582,7 @@ export default function Home() {
                     <h1 className={`text-2xl md:text-3xl font-bold tracking-tight font-serif ${openedNotePage.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{openedNotePage.title}</h1>
                   </div>
                 )}
-                <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">{MONTH_NAMES[currentMonthVal]} {currentYearVal}</span>
+                <span className="text-xs bg-amber-200 text-amber-900 px-2.5 py-1 rounded font-bold">{formatNoteBadge(openedNotePage)}</span>
               </div>
               {openedNotePage.image_url && !isInlineEditing && (
                 <div className="my-4 max-w-md rounded-xl overflow-hidden border shadow-sm relative z-10"><img src={openedNotePage.image_url} alt="Çizim Görseli" className="w-full object-cover" /></div>
@@ -610,48 +621,91 @@ export default function Home() {
                 <button onClick={() => { resetForm(); setIsTaskType(true); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all"><CheckSquare size={15} /> Yeni Görev Ekle</button>
               </div>
             </header>
-
-            {notebookPages.length > 0 && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 border-b border-gray-200 text-xs">
-                <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium transition-all ${activePageId === null ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Tüm Notlar ({notes.filter(n => n.notebook_name === activeNotebook).length})</button>
-                {notebookPages.map(pg => {
-                  const count = notes.filter(n => n.page_id === pg.id).length;
-                  return (
-                    <button key={pg.id} onClick={() => setActivePageId(pg.id)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium flex items-center gap-1.5 transition-all ${activePageId === pg.id ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                      <FileText size={13} /><span>{pg.title}</span><span className="opacity-70 text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
-              {filteredNotes.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu bölümde henüz not veya görev kartı bulunmuyor.</p>
-              ) : (
-                filteredNotes.map(note => (
-                  <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}>
-                    <div className="space-y-2 mb-3">
-                      <div className="flex justify-between items-center flex-wrap gap-1">
-                        <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>
-                          {note.is_task ? '☑️ GÖREV' : `[${DAY_NAMES[note.day_index || 0]}] [${note.time || '09:00'}]`}
-                        </span>
-                        {note.is_task && (
-                          <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${note.is_completed ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-400 hover:border-indigo-600'}`}>
-                            {note.is_completed && <Check size={14} />}
-                          </button>
-                        )}
-                      </div>
-                      <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
-                      <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
-                    </div>
-                    <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
-                      <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
-                    </div>
-                  </div>
-                ))
+            {/* YENİ: Tüm defterler genelinde arama */}
+            <div className="mb-4 relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tüm defterlerde başlık veya içerik ara..."
+                className="w-full border rounded-xl pl-9 pr-9 py-2.5 text-xs outline-none bg-gray-50 focus:bg-white focus:border-teal-600 transition-colors"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
+                  <X size={14} />
+                </button>
               )}
             </div>
+            {isSearching ? (
+              <>
+                <p className="text-xs text-gray-500 mb-3">"{searchQuery}" için {searchResults.length} sonuç bulundu (tüm defterlerde)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
+                  {searchResults.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-12 col-span-full">Eşleşen not veya görev bulunamadı.</p>
+                  ) : (
+                    searchResults.map(note => (
+                      <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}>
+                        <div className="space-y-2 mb-3">
+                          <div className="flex justify-between items-center flex-wrap gap-1">
+                            <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>{formatNoteBadge(note)}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-black/10 font-semibold text-gray-700">{note.notebook_name}</span>
+                          </div>
+                          <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
+                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                        </div>
+                        <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
+                          <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {notebookPages.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 border-b border-gray-200 text-xs">
+                    <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium transition-all ${activePageId === null ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Tüm Notlar ({notes.filter(n => n.notebook_name === activeNotebook).length})</button>
+                    {notebookPages.map(pg => {
+                      const count = notes.filter(n => n.page_id === pg.id).length;
+                      return (
+                        <button key={pg.id} onClick={() => setActivePageId(pg.id)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium flex items-center gap-1.5 transition-all ${activePageId === pg.id ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                          <FileText size={13} /><span>{pg.title}</span><span className="opacity-70 text-[10px] bg-black/10 px-1.5 py-0.2 rounded-full">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-stretch">
+                  {filteredNotes.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-12 col-span-full">Bu bölümde henüz not veya görev kartı bulunmuyor.</p>
+                  ) : (
+                    filteredNotes.map(note => (
+                      <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-50'} p-5 rounded-2xl border border-black/10 shadow-xs cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between min-h-[210px] group relative`}>
+                        <div className="space-y-2 mb-3">
+                          <div className="flex justify-between items-center flex-wrap gap-1">
+                            <span className={`${note.badge_color || 'bg-amber-200'} text-[10px] px-2.5 py-0.5 rounded-md font-bold tracking-wide shadow-2xs`}>
+                              {formatNoteBadge(note)}
+                            </span>
+                            {note.is_task && (
+                              <button onClick={(e) => toggleTaskStatus(note.id, note.is_completed, e)} className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${note.is_completed ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-400 hover:border-indigo-600'}`}>
+                                {note.is_completed && <Check size={14} />}
+                              </button>
+                            )}
+                          </div>
+                          <h3 className={`font-bold text-sm ${note.is_completed ? 'line-through text-gray-400' : 'text-gray-900'} group-hover:text-teal-950 transition-colors leading-snug`}>{note.title}</h3>
+                          <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap line-clamp-4">{note.content}</p>
+                        </div>
+                        <div className="pt-3 border-t border-black/10 flex justify-between items-center text-[11px] mt-auto">
+                          <span className="text-gray-500 font-medium text-[10px]">Detaylı Göster</span><span className="font-bold text-teal-800 hover:text-teal-950 flex items-center gap-1">Aç →</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </>
         ) : (
           /* ENTEGRE TAKVİM VE GÖREVLER GÖRÜNÜMÜ */
@@ -680,17 +734,15 @@ export default function Home() {
                 <button onClick={() => { resetForm(); setIsTaskType(true); setIsModalOpen(true); }} className="bg-indigo-900 hover:bg-indigo-800 text-white px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1 shadow-sm"><CheckSquare size={15} /> Görev</button>
               </div>
             </header>
-
             <div className="flex-1 overflow-auto">
               {calendarMode === 'day' ? (
                 <div className="flex flex-col h-full bg-white p-4 max-w-3xl mx-auto">
                   <div className="space-y-3 divide-y divide-gray-100 flex-1 overflow-y-auto pr-1">
                     {hours.map(hour => {
-                      const dayOfWeekIndex = (currentDate.getDay() + 6) % 7;
-                      const matchedNotes = notes.filter(n => n.day_index === dayOfWeekIndex && n.time === hour);
+                      const isoToday = toISODate(currentDate); // YENİ: haftanın günü yerine gerçek tarih ile eşleştir
+                      const matchedNotes = notes.filter(n => n.event_date === isoToday && n.time === hour);
                       const matchedGoogleEvents = googleCalendarEvents.filter(g => g.dayNumber === currentDate.getDate() && g.monthNumber === currentDate.getMonth() && g.yearNumber === currentDate.getFullYear() && (g.time === hour || g.time === 'Tüm Gün'));
                       const matchedOutlookEvents = outlookCalendarEvents.filter(o => o.dayNumber === currentDate.getDate() && o.monthNumber === currentDate.getMonth() && o.yearNumber === currentDate.getFullYear() && (o.time === hour || o.time === 'Tüm Gün'));
-
                       return (
                         <div key={hour} className="pt-2 flex gap-4 items-start min-h-[60px]">
                           <span className="text-xs font-semibold text-gray-400 w-12 pt-1">{hour}</span>
@@ -733,9 +785,11 @@ export default function Home() {
                     {hours.map((hour) => (
                       <div key={hour} className="grid grid-cols-[60px_repeat(7,1fr)] min-h-[55px]">
                         <div className="text-[11px] text-gray-400 font-medium text-center pt-1 border-r border-gray-200 bg-gray-50/30">{hour}</div>
-                        {weekDays.map((wDay, dayIdx) => (
+                        {weekDays.map((wDay, dayIdx) => {
+                          const isoDay = toISODate(wDay); // YENİ
+                          return (
                           <div key={dayIdx} className="border-r border-gray-100 p-1 relative flex flex-col gap-1">
-                            {notes.filter(n => n.day_index === dayIdx && n.time === hour).map(note => (
+                            {notes.filter(n => n.event_date === isoDay && n.time === hour).map(note => (
                               <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-teal-100'} p-1 rounded text-[10px] font-semibold border border-black/10 cursor-pointer truncate flex items-center gap-1 ${note.is_completed ? 'line-through opacity-50' : ''}`}>
                                 {note.is_task && <span className="text-indigo-800 font-bold">☑</span>}
                                 <span>{note.title}</span>
@@ -744,7 +798,8 @@ export default function Home() {
                             {googleCalendarEvents.filter(g => g.dayNumber === wDay.getDate() && g.monthNumber === wDay.getMonth() && g.yearNumber === wDay.getFullYear() && (g.time === hour || g.time === 'Tüm Gün')).map(gEvent => (<div key={gEvent.id} className={`${gEvent.color} p-1 rounded text-[10px] font-semibold border border-sky-300 truncate`}>{gEvent.title}</div>))}
                             {outlookCalendarEvents.filter(o => o.dayNumber === wDay.getDate() && o.monthNumber === wDay.getMonth() && o.yearNumber === wDay.getFullYear() && (o.time === hour || o.time === 'Tüm Gün')).map(oEvent => (<div key={oEvent.id} className={`${oEvent.color} p-1 rounded text-[10px] font-semibold border border-blue-300 truncate`}>{oEvent.title}</div>))}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ))}
                   </div>
@@ -754,15 +809,16 @@ export default function Home() {
                   {DAY_NAMES.map(d => <div key={d} className="bg-gray-50 text-center py-2 text-xs font-bold text-gray-600 border-b">{d}</div>)}
                   {Array.from({ length: firstDayOfMonthIndex }).map((_, i) => <div key={'empty-' + i} className="min-h-[85px] bg-gray-50/30 p-1" />)}
                   {Array.from({ length: daysInMonth }).map((_, i) => {
-                    const dayNum = i + 1; const dayOfWeek = (i + firstDayOfMonthIndex) % 7;
+                    const dayNum = i + 1;
                     const isToday = new Date().getDate() === dayNum && new Date().getMonth() === currentMonthVal && new Date().getFullYear() === currentYearVal;
+                    const cellISO = `${currentYearVal}-${String(currentMonthVal + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`; // YENİ: haftanın günü yerine gerçek tarih
                     return (
                       <div key={i} className={`min-h-[85px] p-1.5 flex flex-col gap-1 overflow-hidden group ${isToday ? 'bg-teal-50/40' : 'bg-white'}`}>
                         <div className="flex justify-between items-center">
                           <span className={`text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-teal-900 text-white' : 'text-gray-600'}`}>{dayNum}</span>
                         </div>
                         <div className="flex flex-col gap-1 overflow-y-auto">
-                          {notes.filter(n => (n.day_index % 7) === dayOfWeek).map(note => (
+                          {notes.filter(n => n.event_date === cellISO).map(note => (
                             <div key={note.id} onClick={() => handleOpenPage(note)} className={`${note.color || 'bg-amber-100'} px-1.5 py-0.5 rounded text-[10px] font-semibold truncate cursor-pointer flex items-center gap-1 ${note.is_completed ? 'line-through opacity-50' : ''}`}>
                               {note.is_task && <span className="text-indigo-800 font-bold">☑</span>}
                               <span>{note.title}</span>
@@ -777,10 +833,27 @@ export default function Home() {
                 </div>
               )}
             </div>
+            {/* YENİ: gerçek tarihi olmayan (eski) notlar artık takvimde tekrarlanarak gösterilmiyor — burada tek tek listelenip tarih atanabiliyor */}
+            {undatedNotes.length > 0 && (
+              <div className="border-t border-gray-200 bg-amber-50/60 px-4 md:px-6 py-3 max-h-44 overflow-y-auto shrink-0">
+                <p className="text-[11px] font-bold text-amber-800 mb-2 flex items-center gap-1.5">
+                  <ShieldAlert size={13} /> Tarihsiz notlar/görevler ({undatedNotes.length}) — takvimde görünmüyorlar, tarih atayın:
+                </p>
+                <div className="space-y-1.5">
+                  {undatedNotes.map(note => (
+                    <div key={note.id} className="flex items-center justify-between gap-2 bg-white border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs">
+                      <span className="truncate font-medium text-gray-800 flex-1 cursor-pointer" onClick={() => handleOpenPage(note)}>
+                        {note.title} <span className="text-gray-400 font-normal">· {note.notebook_name}</span>
+                      </span>
+                      <input type="date" onChange={(e) => assignEventDate(note.id, e.target.value)} className="border rounded px-1.5 py-0.5 text-[11px]" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
-
       {/* GEMINI AI ASİSTAN */}
       <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end">
         {isGeminiOpen && (
@@ -822,7 +895,6 @@ export default function Home() {
           <div className="bg-gradient-to-tr from-rose-500 to-teal-400 p-1 rounded-lg"><Sparkles size={18} className="text-white animate-pulse" /></div><span className="hidden md:inline">Gemini AI</span>
         </button>
       </div>
-
       {/* MODALLAR */}
       {isCalendarSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -842,7 +914,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4 max-h-[95vh] overflow-y-auto">
@@ -881,18 +952,20 @@ export default function Home() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <div><label className="text-xs text-gray-500 block mb-1">Gün</label><select value={newDayIndex} onChange={(e) => setNewDayIndex(Number(e.target.value))} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{DAY_NAMES.map((d, idx) => <option key={d} value={idx}>{d}</option>)}</select></div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Tarih</label>
+                  <input type="date" value={newEventDate} onChange={(e) => setNewEventDate(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white" required />
+                </div>
                 <div><label className="text-xs text-gray-500 block mb-1">Saat</label><select value={newTime} onChange={(e) => setNewTime(e.target.value)} className="w-full border rounded-lg px-3 py-1.5 text-xs bg-white">{hours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
               </div>
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={resetForm} className="px-3 py-1.5 border rounded-lg text-xs text-gray-600">İptal</button>
-                <button type="submit" disabled={isUploading} className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs font-bold disabled:opacity-50">{isEditMode ? 'Güncelle' : 'Kaydet'}</button>
+                <button type="submit" disabled={isUploading || isSaving} className="px-3 py-1.5 bg-teal-900 text-white rounded-lg text-xs font-bold disabled:opacity-50">{isSaving ? 'Kaydediliyor...' : (isEditMode ? 'Güncelle' : 'Kaydet')}</button>
               </div>
             </form>
           </div>
         </div>
       )}
-
       {isPageModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
@@ -907,7 +980,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
       {isNotebookModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
@@ -922,7 +994,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

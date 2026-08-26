@@ -280,7 +280,8 @@ export default function Home() {
     if (canvasRef.current) drawingData = canvasRef.current.toDataURL();
     // YENİ: gerçek tarihi de güncelle, day_index'i tarihten otomatik türet (geriye dönük uyumluluk için)
     const derivedDayIndex = pageEventDate ? (new Date(pageEventDate + 'T00:00:00').getDay() + 6) % 7 : openedNotePage.day_index;
-    const { data }: any = await supabase.from('notes').update({ title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData, event_date: pageEventDate || null, time: pageTime, day_index: derivedDayIndex }).eq('id', openedNotePage.id).select();
+    const { data, error }: any = await supabase.from('notes').update({ title: pageTitle, content: pageContent, file_url: pageFileUrl, file_type: pageFileType, image_url: drawingData, event_date: pageEventDate || null, time: pageTime, day_index: derivedDayIndex }).eq('id', openedNotePage.id).select();
+    if (error) { alert('Kaydedilemedi: ' + error.message); return; } // YENİ: hata artık sessizce yutulmuyor
     if (data && data.length > 0) {
       setNotes(notes.map(n => n.id === openedNotePage.id ? data[0] : n)); setOpenedNotePage(data[0]);
     }
@@ -354,7 +355,8 @@ export default function Home() {
   const assignEventDate = async (noteId: string, dateStr: string) => {
     if (!dateStr) return;
     const dayIdx = (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7;
-    const { data }: any = await supabase.from('notes').update({ event_date: dateStr, day_index: dayIdx }).eq('id', noteId).select();
+    const { data, error }: any = await supabase.from('notes').update({ event_date: dateStr, day_index: dayIdx }).eq('id', noteId).select();
+    if (error) { alert('Tarih atanamadı: ' + error.message); return; } // YENİ: hata artık sessizce yutulmuyor
     if (data && data.length > 0) {
       setNotes(notes.map(n => n.id === noteId ? data[0] : n));
     }
@@ -382,10 +384,12 @@ export default function Home() {
         is_completed: false
       };
       if (isEditMode && editingNoteId) {
-        const { data }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
+        const { data, error }: any = await supabase.from('notes').update(notePayload).eq('id', editingNoteId).select();
+        if (error) { alert('Kaydedilemedi: ' + error.message); return; } // YENİ: hata artık sessizce yutulmuyor
         if (data && data.length > 0) { setNotes(notes.map(n => n.id === editingNoteId ? data[0] : n)); if (openedNotePage?.id === editingNoteId) setOpenedNotePage(data[0]); }
       } else {
-        const { data }: any = await supabase.from('notes').insert([notePayload]).select();
+        const { data, error }: any = await supabase.from('notes').insert([notePayload]).select();
+        if (error) { alert('Kaydedilemedi: ' + error.message); return; } // YENİ: hata artık sessizce yutulmuyor
         if (data && data.length > 0) setNotes([...notes, data[0]]);
       }
       resetForm();

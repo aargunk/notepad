@@ -260,7 +260,7 @@ export default function Home() {
     if (nbs && nbs.length > 0) {
       setNotebooks(nbs); setActiveNotebook(nbs[0].name);
     } else {
-      const { data: newNb } = await supabase.from('notebooks').insert([{ name: 'Kişisel' }]).select();
+      const { data: newNb } = await supabase.from('notebooks').insert([{ name: 'Kişisel', user_id: session?.user?.id }]).select();
       if (newNb && newNb.length > 0) { setNotebooks(newNb); setActiveNotebook(newNb[0].name); }
     }
     const { data: pgs } = await supabase.from('pages').select('*').order('created_at', { ascending: true });
@@ -480,14 +480,14 @@ export default function Home() {
   const addNotebook = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNotebookName.trim()) return;
-    const { data }: any = await supabase.from('notebooks').insert([{ name: newNotebookName.trim() }]).select();
+    const { data }: any = await supabase.from('notebooks').insert([{ name: newNotebookName.trim(), user_id: session?.user?.id }]).select();
     if (data && data.length > 0) { setNotebooks([...notebooks, data[0]]); setActiveNotebook(data[0].name); }
     setNewNotebookName(''); setIsNotebookModalOpen(false);
   };
   const addPage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPageTitle.trim()) return;
-    const { data }: any = await supabase.from('pages').insert([{ notebook_name: activeNotebook, title: newPageTitle.trim() }]).select();
+    const { data }: any = await supabase.from('pages').insert([{ notebook_name: activeNotebook, title: newPageTitle.trim(), user_id: session?.user?.id }]).select();
     if (data && data.length > 0) { setPages([...pages, data[0]]); setActivePageId(data[0].id); }
     setNewPageTitle(''); setIsPageModalOpen(false);
   };
@@ -559,6 +559,7 @@ export default function Home() {
         file_type: newFileType,
         event_date: finalEventDate,
         day_index: derivedDayIndex,
+        user_id: session?.user?.id, // YENİ: özel/kişiye özel çok kullanıcı modu için sahiplik bilgisi
         time: newTime,
         color: isTaskType ? 'bg-indigo-50 border-indigo-300 text-indigo-950' : newColor,
         badge_color: isTaskType ? 'bg-indigo-200 text-indigo-900' : newBadge,

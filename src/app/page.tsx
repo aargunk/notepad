@@ -118,6 +118,18 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot' | 'reset'>('login'); // YENİ: giriş / üye ol / şifremi unuttum / yeni şifre belirle
+  const [newPassword1, setNewPassword1] = useState(''); // YENİ: şifre sıfırlama ekranı
+  const [newPassword2, setNewPassword2] = useState(''); // YENİ
+  // YENİ: üyelik onay sistemi
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupPassword2, setSignupPassword2] = useState('');
+  const [signupMessage, setSignupMessage] = useState('');
+  const [profile, setProfile] = useState<any>(null);
+  const [profileChecked, setProfileChecked] = useState(false);
+  const [pendingProfiles, setPendingProfiles] = useState<any[]>([]);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   // Takvim Entegrasyonları
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -138,21 +150,48 @@ export default function Home() {
     { name: 'Mor', card: 'bg-[#f4ecf7] border-[#d7bde2] text-purple-950', badge: 'bg-purple-200 text-purple-900' },
     { name: 'Mavi', card: 'bg-[#ebf5fb] border-[#aed6f1] text-sky-950', badge: 'bg-sky-200 text-sky-900' },
   ];
-  // YENİ: Uygulama açılır açılmaz oturum var mı diye bak, oturum durumu değişince (giriş/çıkış) tekrar kontrol et
+  // YENİ: Uygulama açılır açılmaz oturum var mı diye bak, oturum durumu değişince (giriş/çıkış/şifre sıfırlama) tekrar kontrol et
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setAuthChecked(true);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      // E-postadaki "şifreni sıfırla" linkine tıklanınca Supabase otomatik olarak bu event'i fırlatır —
+      // ekstra bir "onay" adımı yok, direkt "yeni şifre belirle" formunu gösteriyoruz.
+      if (event === 'PASSWORD_RECOVERY') setAuthMode('reset');
     });
     return () => { listener.subscription.unsubscribe(); };
   }, []);
-  // YENİ: Verileri sadece giriş yapılmışken çek — böylece kapıdan önce hiçbir defter/not indirilmez
+  // YENİ: Oturum kurulunca kullanıcının onay/admin durumunu kontrol et; sadece onaylıysa gerçek veriler çekilir
   useEffect(() => {
-    if (session) fetchData();
+    if (session) fetchProfile(session.user.id); else { setProfile(null); setProfileChecked(false); }
   }, [session]);
+  useEffect(() => {
+    if (session && profile?.is_approved) fetchData();
+  }, [session, profile]);
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    setProfile(data || null);
+    setProfileChecked(true);
+    if (data?.is_admin) fetchPendingProfiles();
+  };
+  const fetchPendingProfiles = async () => {
+    const { data } = await supabase.from('profiles').select('*').eq('is_approved', false).order('created_at', { ascending: true });
+    if (data) setPendingProfiles(data);
+  };
+  const approveProfile = async (id: string) => {
+    const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
+    if (error) { alert('Onaylanamadı: ' + error.message); return; }
+    setPendingProfiles(prev => prev.filter(p => p.id !== id));
+  };
+  const rejectProfile = async (id: string) => {
+    if (!confirm('Bu üyelik isteğini reddetmek istiyor musunuz? (Not: kişinin giriş hesabı silinmez, sadece onay listesinden kaldırılır ve kalıcı olarak "onay bekliyor" durumunda kalır — hesabı tamamen silmek için Supabase panelinden Authentication > Users kısmını kullanmalısınız.)')) return;
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) { alert('Reddedilemedi: ' + error.message); return; }
+    setPendingProfiles(prev => prev.filter(p => p.id !== id));
+  };
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(''); setIsAuthLoading(true);
@@ -160,9 +199,43 @@ export default function Home() {
     if (error) setAuthError(error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
     setIsAuthLoading(false);
   };
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    if (signupPassword.length < 6) { setAuthError('Şifre en az 6 karakter olmalı.'); return; }
+    if (signupPassword !== signupPassword2) { setAuthError('Şifreler eşleşmiyor.'); return; }
+    setIsAuthLoading(true);
+    const { error } = await supabase.auth.signUp({ email: signupEmail, password: signupPassword });
+    if (error) setAuthError(error.message);
+    else {
+      setSignupMessage('Üyelik isteğiniz alındı. Yönetici onayladıktan sonra giriş yapabileceksiniz.');
+      setAuthMode('login'); setSignupEmail(''); setSignupPassword(''); setSignupPassword2('');
+      await supabase.auth.signOut(); // YENİ: onaylanmadan oturumda kalmasın, login ekranına düşsün
+    }
+    setIsAuthLoading(false);
+  };
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(''); setIsAuthLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, { redirectTo: window.location.origin });
+    if (error) setAuthError(error.message);
+    else setSignupMessage('E-postana bir şifre sıfırlama bağlantısı gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.');
+    setIsAuthLoading(false);
+  };
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    if (newPassword1.length < 6) { setAuthError('Şifre en az 6 karakter olmalı.'); return; }
+    if (newPassword1 !== newPassword2) { setAuthError('Şifreler eşleşmiyor.'); return; }
+    setIsAuthLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword1 });
+    if (error) setAuthError(error.message);
+    else { setAuthMode('login'); setNewPassword1(''); setNewPassword2(''); }
+    setIsAuthLoading(false);
+  };
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setNotebooks([]); setPages([]); setNotes([]); setActivePageId(null); setOpenedNotePage(null); setActiveNotebook('Kişisel');
+    setNotebooks([]); setPages([]); setNotes([]); setActivePageId(null); setOpenedNotePage(null); setActiveNotebook('Kişisel'); setProfile(null); setProfileChecked(false);
   };
   const fetchData = async () => {
     const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
@@ -482,29 +555,119 @@ export default function Home() {
       </div>
     );
   }
-  // YENİ: Giriş yapılmamışsa uygulamanın geri kalanı hiç render edilmiyor — sadece giriş ekranı gösteriliyor
+  // YENİ: E-postadaki şifre sıfırlama linkine tıklanınca (session olsa da olmasa da) direkt bu ekran gösterilir — ekstra bir "onay" adımı yok
+  if (authMode === 'reset') {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7] p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200 p-8 space-y-6">
+          <div className="flex flex-col items-center gap-3">
+            <Logo size={44} showText={true} />
+            <p className="text-xs text-gray-500 flex items-center gap-1.5"><KeyRound size={12} /> Yeni şifreni belirle</p>
+          </div>
+          <form onSubmit={handleSetNewPassword} className="space-y-3">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Yeni Şifre</label>
+              <input type="password" value={newPassword1} onChange={(e) => setNewPassword1(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Yeni Şifre (Tekrar)</label>
+              <input type="password" value={newPassword2} onChange={(e) => setNewPassword2(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
+            </div>
+            {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
+            <button type="submit" disabled={isAuthLoading} className="w-full bg-teal-900 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+              {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />} Şifreyi Güncelle
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+  // YENİ: Giriş yapılmamışsa uygulamanın geri kalanı hiç render edilmiyor — giriş / üye ol / şifremi unuttum ekranlarından biri gösteriliyor
   if (!session) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7] p-4">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200 p-8 space-y-6">
           <div className="flex flex-col items-center gap-3">
             <Logo size={44} showText={true} />
-            <p className="text-xs text-gray-500 flex items-center gap-1.5"><Lock size={12} /> Bu not defteri özel — devam etmek için giriş yapın</p>
+            <p className="text-xs text-gray-500 flex items-center gap-1.5"><Lock size={12} /> {authMode === 'signup' ? 'Yeni üyelik isteği gönder' : authMode === 'forgot' ? 'Şifreni sıfırla' : 'Bu not defteri özel — devam etmek için giriş yapın'}</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-3">
-            <div>
-              <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><Mail size={13} /> E-posta</label>
-              <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><KeyRound size={13} /> Şifre</label>
-              <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
-            </div>
-            {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
-            <button type="submit" disabled={isAuthLoading} className="w-full bg-teal-900 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-              {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} Giriş Yap
-            </button>
-          </form>
+          {authMode === 'signup' ? (
+            <form onSubmit={handleSignup} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><Mail size={13} /> E-posta</label>
+                <input type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><KeyRound size={13} /> Şifre</label>
+                <input type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><KeyRound size={13} /> Şifre (Tekrar)</label>
+                <input type="password" value={signupPassword2} onChange={(e) => setSignupPassword2(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
+              </div>
+              {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
+              <button type="submit" disabled={isAuthLoading} className="w-full bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />} Üyelik İsteği Gönder
+              </button>
+              <p className="text-[11px] text-gray-500 text-center leading-relaxed">Üyeliğiniz gönderildikten sonra yönetici onaylayana kadar giriş yapamazsınız.</p>
+              <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} className="w-full text-xs text-teal-700 hover:text-teal-900 font-medium">← Girişe dön</button>
+            </form>
+          ) : authMode === 'forgot' ? (
+            <form onSubmit={handleForgotPassword} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><Mail size={13} /> E-posta</label>
+                <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
+              </div>
+              {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
+              {signupMessage && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{signupMessage}</p>}
+              <button type="submit" disabled={isAuthLoading} className="w-full bg-teal-900 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Sıfırlama Bağlantısı Gönder
+              </button>
+              <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setSignupMessage(''); }} className="w-full text-xs text-teal-700 hover:text-teal-900 font-medium">← Girişe dön</button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><Mail size={13} /> E-posta</label>
+                <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required autoFocus />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 flex items-center gap-1.5 mb-1"><KeyRound size={13} /> Şifre</label>
+                <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-600" required />
+              </div>
+              {authError && <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{authError}</p>}
+              {signupMessage && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{signupMessage}</p>}
+              <button type="submit" disabled={isAuthLoading} className="w-full bg-teal-900 hover:bg-teal-800 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />} Giriş Yap
+              </button>
+              <div className="flex justify-between pt-1">
+                <button type="button" onClick={() => { setAuthMode('signup'); setAuthError(''); setSignupMessage(''); }} className="text-[11px] text-gray-500 hover:text-teal-900 font-medium flex items-center gap-1"><UserPlus size={12} /> Üye Ol</button>
+                <button type="button" onClick={() => { setAuthMode('forgot'); setAuthError(''); setSignupMessage(''); }} className="text-[11px] text-gray-500 hover:text-teal-900 font-medium">Şifremi Unuttum?</button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+  // YENİ: Oturum var ama onay durumu henüz kontrol edilmediyse kısa bir yükleniyor ekranı
+  if (!profileChecked) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7]">
+        <Loader2 size={28} className="animate-spin text-teal-800" />
+      </div>
+    );
+  }
+  // YENİ: Hesap var ama henüz yönetici onaylamadıysa uygulamaya hiç girilmiyor
+  if (!profile?.is_approved) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#f4f5f7] p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200 p-8 space-y-4 text-center">
+          <Logo size={44} showText={true} />
+          <ShieldAlert size={28} className="text-amber-500 mx-auto" />
+          <h3 className="font-bold text-gray-900">Hesabınız onay bekliyor</h3>
+          <p className="text-xs text-gray-500 leading-relaxed">Üyelik isteğiniz alındı ama henüz yönetici tarafından onaylanmadı. Onaylandığında bu sayfayı yenileyip tekrar giriş yapabilirsiniz.</p>
+          <button onClick={handleLogout} className="text-xs text-teal-700 hover:text-teal-900 font-medium">Çıkış Yap</button>
         </div>
       </div>
     );
@@ -563,6 +726,16 @@ export default function Home() {
                 <div className="flex items-center gap-2"><CalendarIcon size={14} /> Takvim & Görevler</div>
               </div>
             </div>
+            {/* YENİ: Sadece yönetici görür — bekleyen üyelik istekleri */}
+            {profile?.is_admin && (
+              <div className="space-y-2 pt-3 border-t border-teal-800">
+                <p className="text-teal-200 text-[11px] font-semibold uppercase tracking-wider px-1">Yönetim</p>
+                <div onClick={() => setIsAdminPanelOpen(true)} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors hover:bg-white/5 text-teal-100">
+                  <div className="flex items-center gap-2"><UserPlus size={14} /> Bekleyen Üyelik Onayları</div>
+                  {pendingProfiles.length > 0 && <span className="bg-amber-400 text-amber-950 text-[10px] font-bold px-1.5 py-0.2 rounded-full">{pendingProfiles.length}</span>}
+                </div>
+              </div>
+            )}
           </nav>
         </div>
         <div className="border-t border-teal-800 pt-3 flex items-center justify-between gap-2">
@@ -969,6 +1142,34 @@ export default function Home() {
         </button>
       </div>
       {/* MODALLAR */}
+      {isAdminPanelOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-lg shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-bold text-base text-gray-900 flex items-center gap-2"><UserPlus size={18} className="text-teal-900" /> Bekleyen Üyelik Onayları</h3>
+              <button onClick={() => setIsAdminPanelOpen(false)} className="text-gray-400 hover:text-gray-700 text-sm">✕</button>
+            </div>
+            {pendingProfiles.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">Onay bekleyen üyelik isteği yok.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingProfiles.map(p => (
+                  <div key={p.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-xl px-3.5 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.email}</p>
+                      <p className="text-[10px] text-gray-400">{p.created_at ? new Date(p.created_at).toLocaleString('tr-TR') : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => approveProfile(p.id)} className="text-xs bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1"><Check size={13} /> Onayla</button>
+                      <button onClick={() => rejectProfile(p.id)} className="text-xs bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg font-semibold">Reddet</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {isCalendarSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-5">

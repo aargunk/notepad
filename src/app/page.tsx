@@ -77,7 +77,8 @@ function Logo({ size = 32, showText = true }: { size?: number; showText?: boolea
 export default function Home() {
   const [notebooks, setNotebooks] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
-  const [activeNotebook, setActiveNotebook] = useState('Kişisel');
+  // YENİ: defterler artık isim yerine sabit ID ile takip ediliyor — aynı isimde iki defter olsa bile birbirine karışmıyor
+  const [activeNotebookId, setActiveNotebookId] = useState<string | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'notes' | 'calendar'>('notes');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -253,15 +254,17 @@ export default function Home() {
   };
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setNotebooks([]); setPages([]); setNotes([]); setActivePageId(null); setOpenedNotePage(null); setActiveNotebook('Kişisel'); setProfile(null); setProfileChecked(false);
+    setNotebooks([]); setPages([]); setNotes([]); setActivePageId(null); setOpenedNotePage(null); setActiveNotebookId(null); setProfile(null); setProfileChecked(false);
   };
   const fetchData = async () => {
-    const { data: nbs } = await supabase.from('notebooks').select('*').order('created_at', { ascending: true });
+    // YENİ: sürükle-bırak ile belirlenen kalıcı sıralama (sort_order); henüz sıralanmamış eski
+    // defterler için created_at ikinci sıralama ölçütü olarak kullanılıyor
+    const { data: nbs } = await supabase.from('notebooks').select('*').order('sort_order', { ascending: true, nullsFirst: false }).order('created_at', { ascending: true });
     if (nbs && nbs.length > 0) {
-      setNotebooks(nbs); setActiveNotebook(nbs[0].name);
+      setNotebooks(nbs); setActiveNotebookId(nbs[0].id);
     } else {
-      const { data: newNb } = await supabase.from('notebooks').insert([{ name: 'Kişisel', user_id: session?.user?.id }]).select();
-      if (newNb && newNb.length > 0) { setNotebooks(newNb); setActiveNotebook(newNb[0].name); }
+      const { data: newNb } = await supabase.from('notebooks').insert([{ name: 'Kişisel', user_id: session?.user?.id, sort_order: 0 }]).select();
+      if (newNb && newNb.length > 0) { setNotebooks(newNb); setActiveNotebookId(newNb[0].id); }
     }
     const { data: pgs } = await supabase.from('pages').select('*').order('created_at', { ascending: true });
     if (pgs) setPages(pgs);
@@ -390,12 +393,17 @@ export default function Home() {
   };
   const handleDragStart = (index: number) => { draggedNotebookIndex.current = index; };
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
-  const handleDrop = (dropIndex: number) => {
+  const handleDrop = async (dropIndex: number) => {
     if (draggedNotebookIndex.current === null || draggedNotebookIndex.current === dropIndex) return;
     const reordered = [...notebooks];
     const [draggedItem] = reordered.splice(draggedNotebookIndex.current, 1);
     reordered.splice(dropIndex, 0, draggedItem);
-    setNotebooks(reordered);
+    setNotebooks(reordered); // arayüz hemen güncellensin
+    // YENİ: yeni sıralama veritabanına da yazılıyor — daha önce sadece o oturumda görünüp
+    // sayfa yenilenince kayboluyordu. Hata olursa kullanıcı bilgilendirilir.
+    const results = await Promise.all(reordered.map((nb, idx) => supabase.from('notebooks').update({ sort_order: idx }).eq('id', nb.id)));
+    const failed = results.find(r => r.error);
+    if (failed?.error) alert('Defter sıralaması kaydedilemedi: ' + failed.error.message);
     draggedNotebookIndex.current = null;
   };
   useEffect(() => { if (chatBottomRef.current) chatBottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [geminiMessages]);
@@ -479,34 +487,54 @@ export default function Home() {
   const clearCanvas = () => { if (canvasRef.current) canvasRef.current.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); };
   const addNotebook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNotebookName.trim()) return;
-    const { data }: any = await supabase.from('notebooks').insert([{ name: newNotebookName.trim(), user_id: session?.user?.id }]).select();
-    if (data && data.length > 0) { setNotebooks([...notebooks, data[0]]); setActiveNotebook(data[0].name); }
+    const trimmedName = newNotebookName.trim();
+    if (!trimmedName) return;
+    // YENİ: aynı isimde ikinci bir defter oluşturmayı engelle — isim üzerinden eşleşen eski mantık artık
+    // güvenli olsa da (ID'ye taşındı), kullanıcının kendi defterlerini birbirinden ayırt edebilmesi için gerekli
+    if (notebooks.some(nb => nb.name.trim().toLocaleLowerCase('tr-TR') === trimmedName.toLocaleLowerCase('tr-TR'))) {
+      alert('Bu isimde bir defter zaten var. Lütfen farklı bir isim seçin.');
+      return;
+    }
+    const { data, error }: any = await supabase.from('notebooks').insert([{ name: trimmedName, user_id: session?.user?.id, sort_order: notebooks.length }]).select();
+    // YENİ: veritabanındaki UNIQUE kısıtı (aynı isimli defter engeli) tetiklenirse anlaşılır bir mesaj göster
+    if (error) { alert(error.code === '23505' ? 'Bu isimde bir defter zaten var. Lütfen farklı bir isim seçin.' : 'Defter oluşturulamadı: ' + error.message); return; }
+    if (data && data.length > 0) { setNotebooks([...notebooks, data[0]]); setActiveNotebookId(data[0].id); }
     setNewNotebookName(''); setIsNotebookModalOpen(false);
   };
   const addPage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPageTitle.trim()) return;
-    const { data }: any = await supabase.from('pages').insert([{ notebook_name: activeNotebook, title: newPageTitle.trim(), user_id: session?.user?.id }]).select();
+    const { data }: any = await supabase.from('pages').insert([{ notebook_id: activeNotebookId, notebook_name: activeNotebookName, title: newPageTitle.trim(), user_id: session?.user?.id }]).select();
     if (data && data.length > 0) { setPages([...pages, data[0]]); setActivePageId(data[0].id); }
     setNewPageTitle(''); setIsPageModalOpen(false);
   };
   const deletePage = async (pageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Bu sayfayı silmek istediğinize emin misiniz?")) {
-      await supabase.from('pages').delete().eq('id', pageId); await supabase.from('notes').delete().eq('page_id', pageId);
+      // YENİ: önce notları, sonra sayfayı sil — hata varsa hiçbiri sessizce yutulmasın
+      const { error: notesErr } = await supabase.from('notes').delete().eq('page_id', pageId);
+      if (notesErr) { alert('Sayfadaki notlar silinemedi: ' + notesErr.message); return; }
+      const { error: pageErr } = await supabase.from('pages').delete().eq('id', pageId);
+      if (pageErr) { alert('Sayfa silinemedi: ' + pageErr.message); return; }
       setPages(pages.filter(p => p.id !== pageId)); setNotes(notes.filter(n => n.page_id !== pageId));
       if (activePageId === pageId) setActivePageId(null);
     }
   };
-  const deleteNotebook = async (nbName: string, e: React.MouseEvent) => {
+  const deleteNotebook = async (nbId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (notebooks.length <= 1) { alert('En az bir defter kalmalıdır!'); return; }
     if (confirm(`Defteri silmek istediğinize emin misiniz?`)) {
-      await supabase.from('notebooks').delete().eq('name', nbName); await supabase.from('pages').delete().eq('notebook_name', nbName); await supabase.from('notes').delete().eq('notebook_name', nbName);
-      const remainingNotebooks = notebooks.filter(nb => nb.name !== nbName);
-      setNotebooks(remainingNotebooks); setPages(pages.filter(p => p.notebook_name !== nbName)); setNotes(notes.filter(n => n.notebook_name !== nbName));
-      if (activeNotebook === nbName) setActiveNotebook(remainingNotebooks[0].name);
+      // YENİ: artık isim değil ID ile siliniyor — aynı isimde başka bir defter varsa bile karışmıyor.
+      // Ayrıca her adımda hata kontrolü var: biri başarısız olursa geri kalanına devam edilmiyor ve kullanıcı bilgilendiriliyor
+      const { error: notesErr } = await supabase.from('notes').delete().eq('notebook_id', nbId);
+      if (notesErr) { alert('Defterdeki notlar silinemedi: ' + notesErr.message); return; }
+      const { error: pagesErr } = await supabase.from('pages').delete().eq('notebook_id', nbId);
+      if (pagesErr) { alert('Defterdeki sayfalar silinemedi: ' + pagesErr.message); return; }
+      const { error: nbErr } = await supabase.from('notebooks').delete().eq('id', nbId);
+      if (nbErr) { alert('Defter silinemedi: ' + nbErr.message); return; }
+      const remainingNotebooks = notebooks.filter(nb => nb.id !== nbId);
+      setNotebooks(remainingNotebooks); setPages(pages.filter(p => p.notebook_id !== nbId)); setNotes(notes.filter(n => n.notebook_id !== nbId));
+      if (activeNotebookId === nbId) setActiveNotebookId(remainingNotebooks[0].id);
     }
   };
   const toggleTaskStatus = async (noteId: string, currentCompletedStatus: boolean, e?: React.MouseEvent) => {
@@ -551,7 +579,8 @@ export default function Home() {
       const finalEventDate = wantsDate ? (newEventDate || null) : null;
       const derivedDayIndex = finalEventDate ? (new Date(finalEventDate + 'T00:00:00').getDay() + 6) % 7 : null;
       const notePayload = {
-        notebook_name: activeNotebook,
+        notebook_id: activeNotebookId,
+        notebook_name: activeNotebookName,
         page_id: activePageId,
         title: newTitle,
         content: newContent || 'İçerik girilmedi...',
@@ -582,7 +611,9 @@ export default function Home() {
   };
   const deleteNote = async (id: string) => {
     if(confirm("Silmek istediğinize emin misiniz?")) {
-      await supabase.from('notes').delete().eq('id', id); setNotes(notes.filter(n => n.id !== id)); setOpenedNotePage(null);
+      const { error } = await supabase.from('notes').delete().eq('id', id);
+      if (error) { alert('Not silinemedi: ' + error.message); return; } // YENİ: hata artık sessizce yutulmuyor
+      setNotes(notes.filter(n => n.id !== id)); setOpenedNotePage(null);
     }
   };
   const resetForm = () => { setIsEditMode(false); setEditingNoteId(null); setNewTitle(''); setNewContent(''); setNewFileUrl(''); setNewFileType('pdf'); setIsTaskType(false); setIsEventType(false); setWantsReminder(false); setIsModalOpen(false); setNewEventDate(toISODate(new Date())); setNewTime('09:00'); };
@@ -602,9 +633,12 @@ export default function Home() {
     else next.setMonth(next.getMonth() + 1);
     setCurrentDate(next);
   };
-  const notebookPages = pages.filter(p => p.notebook_name === activeNotebook);
+  // YENİ: görüntülenecek isim, seçili defterin ID'sinden türetiliyor — filtreleme artık isim değil ID ile yapılıyor
+  const activeNotebookObj = notebooks.find(nb => nb.id === activeNotebookId);
+  const activeNotebookName = activeNotebookObj?.name || '';
+  const notebookPages = pages.filter(p => p.notebook_id === activeNotebookId);
   const filteredNotes = notes.filter(n => {
-    if (n.notebook_name !== activeNotebook) return false;
+    if (n.notebook_id !== activeNotebookId) return false;
     if (activePageId) return n.page_id === activePageId;
     return true;
   });
@@ -778,16 +812,16 @@ export default function Home() {
                 <div key={nb.id} className="space-y-1">
                   <div
                     draggable onDragStart={() => handleDragStart(index)} onDragOver={handleDragOver} onDrop={() => handleDrop(index)}
-                    onClick={() => { setActiveNotebook(nb.name); setActivePageId(null); setActiveView('notes'); setOpenedNotePage(null); setIsInlineEditing(false); setIsDrawingMode(false); setIsMobileSidebarOpen(false); }}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing text-xs transition-all group ${activeView === 'notes' && activeNotebook === nb.name ? 'bg-white/20 font-medium text-white shadow-xs' : 'hover:bg-white/10 text-teal-100'}`}
+                    onClick={() => { setActiveNotebookId(nb.id); setActivePageId(null); setActiveView('notes'); setOpenedNotePage(null); setIsInlineEditing(false); setIsDrawingMode(false); setIsMobileSidebarOpen(false); }}
+                    className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing text-xs transition-all group ${activeView === 'notes' && activeNotebookId === nb.id ? 'bg-white/20 font-medium text-white shadow-xs' : 'hover:bg-white/10 text-teal-100'}`}
                   >
                     <div className="flex items-center gap-1.5 truncate"><GripVertical size={13} className="text-teal-400/60 shrink-0" /><Book size={14} className="shrink-0" /> <span className="truncate">{nb.name}</span></div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); setActiveNotebook(nb.name); setIsPageModalOpen(true); }} className="text-teal-200 hover:text-white p-0.5"><Plus size={12} /></button>
-                      {notebooks.length > 1 && <button onClick={(e) => deleteNotebook(nb.name, e)} className="text-teal-200 hover:text-red-300 p-0.5"><Trash2 size={12} /></button>}
+                      <button onClick={(e) => { e.stopPropagation(); setActiveNotebookId(nb.id); setIsPageModalOpen(true); }} className="text-teal-200 hover:text-white p-0.5"><Plus size={12} /></button>
+                      {notebooks.length > 1 && <button onClick={(e) => deleteNotebook(nb.id, e)} className="text-teal-200 hover:text-red-300 p-0.5"><Trash2 size={12} /></button>}
                     </div>
                   </div>
-                  {activeNotebook === nb.name && notebookPages.length > 0 && (
+                  {activeNotebookId === nb.id && notebookPages.length > 0 && (
                     <div className="pl-6 space-y-1 my-1 border-l border-teal-700/50 ml-3">
                       {notebookPages.map(pg => (
                         <div key={pg.id} onClick={() => { setActivePageId(pg.id); setActiveView('notes'); setOpenedNotePage(null); }} className={`flex items-center justify-between px-2 py-1 rounded text-[11px] cursor-pointer group ${activePageId === pg.id ? 'bg-teal-800/80 text-white font-semibold' : 'text-teal-200 hover:text-white hover:bg-teal-800/40'}`}>
@@ -954,7 +988,7 @@ export default function Home() {
           <>
             <header className="flex justify-between items-center mb-4 flex-wrap gap-2">
               <div>
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Book size={20} className="text-teal-900" /> {activeNotebook} Defteri</h2>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Book size={20} className="text-teal-900" /> {activeNotebookName} Defteri</h2>
                 <p className="text-xs text-gray-500">{activePageId ? `Seçili Sayfa: ${pages.find(p => p.id === activePageId)?.title}` : 'Tüm Sayfalar Gösteriliyor'}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -1013,7 +1047,7 @@ export default function Home() {
               <>
                 {notebookPages.length > 0 && (
                   <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 border-b border-gray-200 text-xs">
-                    <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium transition-all ${activePageId === null ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Tüm Notlar ({notes.filter(n => n.notebook_name === activeNotebook).length})</button>
+                    <button onClick={() => setActivePageId(null)} className={`px-3 py-1.5 rounded-lg shrink-0 font-medium transition-all ${activePageId === null ? 'bg-teal-900 text-white shadow-2xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Tüm Notlar ({notes.filter(n => n.notebook_id === activeNotebookId).length})</button>
                     {notebookPages.map(pg => {
                       const count = notes.filter(n => n.page_id === pg.id).length;
                       return (
@@ -1371,7 +1405,7 @@ export default function Home() {
       {isPageModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
-            <h3 className="font-bold text-base text-gray-900">"{activeNotebook}" İçin Yeni Sayfa</h3>
+            <h3 className="font-bold text-base text-gray-900">"{activeNotebookName}" İçin Yeni Sayfa</h3>
             <form onSubmit={addPage} className="space-y-3">
               <input type="text" value={newPageTitle} onChange={(e) => setNewPageTitle(e.target.value)} placeholder="Sayfa başlığı..." className="w-full border rounded-lg px-3 py-2 text-xs outline-none" required />
               <div className="flex justify-end gap-2 pt-2">
